@@ -20,6 +20,7 @@ Type a city name and the plugin flies the whole trip: automatic takeoff, climb, 
 - **Extended autopilot**: altitude, heading, speed, vertical speed and max bank, with keyboard shortcuts.
 - **Aircraft systems panel**: engines, gear, flaps, spoilers, brakes, trim, reverse thrust and **individual throttle per engine**.
 - **English and Romanian**, switchable in Settings.
+- **Air traffic control (ATC).** A player can act as tower controller for any airport, with a radar, traffic strips and clearances. Pilots using the plugin get every instruction as an *Accept / Unable* card, and the autopilot carries it out. When no human controller is online, a virtual tower clears takeoffs and landings only when the runway and final are free.
 
 ## Installation
 
@@ -53,6 +54,30 @@ Open GeoFS and press **F12** → *Console*. Paste the whole content of `geofs-co
 3. Press **✈ Full flight** (or **Shift+P**). If you are not on a runway, the plugin moves you to the start of the best one, since taxiing is not automated.
 4. Sit back. To land yourself, untick *Automatic landing* in Settings. The autopilot then disconnects at 200 ft.
 
+## Air traffic control (ATC)
+
+ATC messages travel through the **GeoFS chat**, so both the controller and the pilots must be **signed in to GeoFS**. Each chat message is limited to 70 characters.
+
+![ATC radar](docs/screenshot-atc.png)
+
+**Being a controller**
+
+1. Open the panel (**Shift+N**) → **ATC** tab → Role: *Air traffic controller*.
+2. Type the airport (city or ICAO code), press **Open tower** and choose the active runway. The plugin announces "Tower online" in the chat every minute.
+3. The radar shows every aircraft around, including pilots without the plugin and GeoFS AI traffic, labelled with callsign, altitude and speed. Pilot requests (takeoff/landing) are highlighted in red.
+4. Select an aircraft on the radar or in the list and send an instruction: **Line up**, **Takeoff**, **Landing**, **Go around**, **Hold**, **Resume nav**, sequence number, **heading / altitude / speed**, or free text.
+
+**Flying under ATC (pilot)**
+
+- With **Full flight**, the plugin requests departure from the controller and waits. On *line up* it moves to the runway, and on *cleared takeoff* it takes off automatically.
+- Approaching the destination it requests landing. Without a landing clearance it goes around at 500 ft.
+- Every instruction appears as a card: **Accept (Shift+Y)** carries it out through the autopilot and replies "wilco"; **Unable (Shift+U)** declines.
+
+**Virtual tower:** when no human controller is online, the plugin checks the runway and the final approach itself, using the traffic positions GeoFS shares. It holds on the ground until the runway is free, and goes around if the runway is occupied.
+
+**Message format** (readable by everyone, parsed by the plugin): `@CALLSIGN text #CODE [arg]`. For example: `@ROT123 cleared takeoff 26R wind 350/15 #TO 26R`.
+Codes: `TO LU LD GA HOLD RES HDG ALT SPD SEQ MSG` (controller), `RQTO RQLD WILCO UNABLE` (pilot), `ATC ATCOFF` (tower online/offline).
+
 ## Keyboard shortcuts
 
 | Key | Action |
@@ -70,6 +95,7 @@ Open GeoFS and press **F12** → *Console*. Paste the whole content of `geofs-co
 | Shift+G / F / S / E | gear / flaps / spoilers / engines |
 | Shift+C | next camera |
 | Shift+X | show last landing score |
+| Shift+Y / U | ATC: accept / unable |
 
 ## Notes
 
@@ -102,3 +128,6 @@ Merge și cu Tampermonkey sau lipind codul în Console (F12).
 3. **✈ Full flight** (Shift+P) pornește zborul.
 
 Limba se schimbă în **Settings → Language / Limba**.
+
+**Controlor de trafic (ATC):** în tab-ul **ATC** alegi rolul *Air traffic controller*, scrii aeroportul și apeși **Open tower**. Pe radar vezi tot traficul, selectezi un avion și îi trimiți instrucțiuni (aliniere, decolare, aterizare, ratare, așteptare, cap/altitudine/viteză). Pilotul cu plugin primește un card **Accept / Refuz**, iar la accept autopilotul execută instrucțiunea. Fără controlor om, un turn virtual autorizează decolările și aterizările doar când pista e liberă. Mesajele trec prin chatul GeoFS, deci trebuie să fii logat în GeoFS.
+

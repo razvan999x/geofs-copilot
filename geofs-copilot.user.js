@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.3.0
+// @version      1.4.0
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -99,6 +99,10 @@ function gcrMain() {
     lastAirport: '',
     bankMax: 25,
     lang: 'en',           // 'en' sau 'ro'
+    atcRole: 'pilot',     // 'pilot' sau 'ctrl'
+    atcAuto: true,        // turn virtual când nu e controlor om
+    atcStation: '',
+    atcRwy: '',
     ndVisible: true,      // harta de navigație
     ndRange: 40,
     ndNorthUp: false,
@@ -111,7 +115,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.3.0';
+  const VERSION = '1.4.0';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -309,6 +313,7 @@ function gcrMain() {
       }
       buildSearchIndex();
       DB.loaded = true;
+      if (settings.atcRole === 'ctrl' && settings.atcStation) setTimeout(openAtcWindow, 500);
       ui.setStatus(L(`Bază de date gata: ${DB.info.size} aeroporturi. Caută după oraș sau nume.`, `Database ready: ${DB.info.size} airports. Search by city or name.`));
       ui.refreshNearest();
       TRIP.stops = TRIP.stops.filter((x) => DB.airports.has(x.apt));
@@ -581,6 +586,7 @@ function gcrMain() {
     buildRoute(); planCruise(); drawApproach();
     if (geofs.autopilot.definition) geofs.autopilot.definition.maxBankAngle = settings.bankMax;
     if (sim.onGround() && settings.autoTakeoff && sim.hasAP()) {
+      if (atcHoldForTakeoff()) return; // așteptăm autorizarea de decolare
       if (!autoTakeoffStart()) {
         const near = nearestAirports(...sim.lla().slice(0, 2), 1)[0];
         const dep = near && near.d < 4 * NM ? bestRunwayForDeparture(near.apt) : null;
@@ -703,9 +709,12 @@ function gcrMain() {
     AP.guide = { track: desiredTrack, hdg: desiredHdg, tgtFt, leg, legDistNm: legDist / NM, inGS, onFinal, todNm, pathNm: pathRemain / NM };
 
     if (AP.phase === 'TAKEOFF') { takeoffTick(); return; }
-    if (AP.phase === 'AUTOTO' || AP.phase === 'STOPOVER') return;
+    if (AP.phase === 'AUTOTO' || AP.phase === 'STOPOVER' || AP.phase === 'WAITTO') return;
     if (!AP.active) return;
     if (!ap.on && AP.phase !== 'ROLLOUT') { AP.active = false; AP.phase = 'MAN'; releaseVS(); ui.toast(L('Autopilotul a fost decuplat – ghidare automată oprită (instrucțiunile rămân în HUD).', 'Autopilot disconnected – automatic guidance stopped (instructions remain on the HUD).')); ui.renderNav(); return; }
+    const atcRes = atcGuidance(st); // vectori de la controlor / ratare / autorizare de aterizare
+    if (atcRes === true) return;
+    if (atcRes === 'GA') { ap.setCourse(desiredHdg, true); return; }
 
     if (AP.phase === 'FLARE' || AP.phase === 'ROLLOUT') {
       // tratat mai jos
@@ -1244,18 +1253,33 @@ function gcrMain() {
   .gcr-stop.done{opacity:.55}
   .gcr-link{color:#d59ce6}
   .gcr-about{margin-top:12px;padding:8px 10px;border:1px solid #6a2c86;border-radius:8px;background:linear-gradient(135deg,#2a1636,#16233a)}
+  .gcr-atclog{max-height:180px;overflow:auto;border:1px solid #26354b;border-radius:6px;padding:4px 6px;background:#0b111c}
+  .gcr-atcmsg{padding:2px 0;border-bottom:1px solid #16202f}
+  .gcr-atcmsg.out b{color:#90caf9}.gcr-atcmsg.in b{color:#ffd54f}.gcr-atcmsg.sys b{color:#d59ce6}
+  #gcr-atccard{position:fixed;z-index:100003;left:50%;top:230px;transform:translateX(-50%);background:rgba(20,30,48,.97);border:2px solid #ffd54f;border-radius:12px;padding:10px 16px;color:#fff;font:13px system-ui,sans-serif;text-align:center;display:none;box-shadow:0 8px 30px rgba(0,0,0,.5);min-width:280px}
+  #gcr-atccard .big{font-size:17px;font-weight:700;color:#ffe082;margin:4px 0}
+  #gcr-atcwin{position:fixed;z-index:100000;left:80px;top:90px;background:rgba(5,10,8,.96);border:1px solid #2e5a3c;border-radius:10px;padding:6px;color:#e8eef7;font:12px system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.55)}
+  #gcr-atcwin canvas{border-radius:8px;cursor:crosshair}
+  #gcr-atcwin input{background:#0c1320;color:#fff;border:1px solid #33465f;border-radius:5px;padding:3px 5px;font-size:12px}
+  .gcr-strips{max-height:260px;overflow:auto}
+  .gcr-strip{display:grid;grid-template-columns:1fr auto;gap:0 6px;padding:4px 6px;margin-bottom:3px;background:#0f1d16;border-left:4px solid #5cff8a;border-radius:4px;cursor:pointer}
+  .gcr-strip .tag{grid-column:1/3;color:#ffab91;font-size:11px}
+  .gcr-strip.req{border-left-color:#ff8a80;background:#2a1414}
+  .gcr-strip.sel{outline:1px solid #ffd54f}
+  .gcr-atccmd{margin-top:6px;border-top:1px solid #1d3326;padding-top:4px}
   .gcr-kbd{display:inline-block;background:#0c1320;border:1px solid #33465f;border-radius:4px;padding:0 5px;font-family:monospace;color:#fff}
   `;
 
   /** Reconstruiește interfața (de ex. după schimbarea limbii), fără a opri zborul. */
   function rebuildUI() {
-    ['gcr-panel', 'gcr-fab', 'gcr-hud', 'gcr-nd', 'gcr-guide'].forEach((id) => { const e = document.getElementById(id); if (e) e.remove(); });
+    ['gcr-panel', 'gcr-fab', 'gcr-hud', 'gcr-nd', 'gcr-guide', 'gcr-atcwin'].forEach((id) => { const e = document.getElementById(id); if (e) e.remove(); });
     initRegionNames();
     if (DB.loaded) buildSearchIndex();
     buildPanel(); buildHud(); buildNd();
     const tab = 'set';
     const b = document.querySelector('#gcr-panel .gcr-tabs button[data-k="' + tab + '"]'); if (b) b.click();
     if (DB.loaded) { ui.refreshNearest(); if (TRIP.stops.length) applyTripTarget(); }
+    if (settings.atcRole === 'ctrl' && settings.atcStation) openAtcWindow();
     ui.renderNav();
   }
 
@@ -1267,16 +1291,18 @@ function gcrMain() {
     document.body.append(el('div', { id: 'gcr-warn' }), el('div', { id: 'gcr-toast' }), el('div', { id: 'gcr-landing' }));
     bindKeys();
     hookControls();
+    hookChat();
     setInterval(() => {
       if (!geofsReady() || sim.paused()) return;
-      try { updateTrack(); guidanceTick(); autoTakeoffTick(); tripTick(); } catch (e) { console.error('[GeoFS Copilot] guidance', e); }
+      try { updateTrack(); guidanceTick(); autoTakeoffTick(); tripTick(); atcTick(); } catch (e) { console.error('[GeoFS Copilot] guidance', e); }
     }, 100);
     setInterval(() => {
       if (!geofsReady() || sim.paused()) return;
       try { assistantTick(); } catch (e) { console.error('[GeoFS Copilot] assistant', e); }
     }, 100);
     setInterval(() => { if (geofsReady()) { try { updateHud(); ui.updateLive(); } catch (e) { console.error('[GeoFS Copilot] HUD', e); } } }, 200);
-    setInterval(() => { if (geofsReady()) { try { updateGuide(); drawNd(); } catch (e) { console.error('[GeoFS Copilot] map', e); } } }, 250);
+    setInterval(() => { if (geofsReady()) { try { updateGuide(); drawNd(); drawAtcWindow(); } catch (e) { console.error('[GeoFS Copilot] map', e); } } }, 250);
+    setInterval(() => { try { if (ui.tab === 'atc' && settings.panelVisible) ui.renderAtc(); } catch (e) { /* */ } }, 2000);
     setInterval(() => { if (geofsReady() && DB.loaded && ui.tab === 'nav' && settings.panelVisible) { try { ui.refreshNearestHere(); if (AP.rwy) ui.renderNav(); } catch (e) { /* */ } } }, 15000);
     // Când avionul e schimbat sau zborul resetat, pistele trebuie redesenate
     try { $(document).on('flyto', () => setTimeout(() => { if (AP.rwy) { buildRoute(); drawApproach(); } }, 1500)); } catch (e) { /* */ }
@@ -1292,7 +1318,7 @@ function gcrMain() {
       el('button', { title: L('Ascunde (Shift+N)', 'Hide (Shift+N)'), onclick: () => togglePanel(false) }, '–'));
     const tabsBar = el('div', { class: 'gcr-tabs' });
     const body = el('div', { class: 'gcr-body' });
-    const tabs = { nav: L('Navigație', 'Navigation'), ap: 'Autopilot', sys: L('Avion', 'Aircraft'), set: L('Setări', 'Settings') };
+    const tabs = { nav: L('Navigație', 'Navigation'), ap: 'Autopilot', sys: L('Avion', 'Aircraft'), atc: 'ATC', set: L('Setări', 'Settings') };
     const pages = {};
     Object.keys(tabs).forEach((k) => {
       const b = el('button', { onclick: () => showTab(k) }, tabs[k]); b.dataset.k = k; tabsBar.append(b);
@@ -1329,6 +1355,7 @@ function gcrMain() {
     buildNavPage(pages.nav);
     buildApPage(pages.ap);
     buildSysPage(pages.sys);
+    buildAtcPage(pages.atc);
     buildSetPage(pages.set);
     showTab('nav');
   }
@@ -1514,7 +1541,7 @@ function gcrMain() {
   }
 
   function phaseText() {
-    const m = { AUTOTO: L('decolare automată', 'automatic takeoff'), STOPOVER: L('escală', 'stopover'), TAKEOFF: L('urcare inițială', 'initial climb'), NAV: L('în drum spre destinație', 'en route to destination'), LOC: L('aliniat cu pista', 'aligned with the runway'), GS: L('pe panta de coborâre', 'on the glide path'), FLARE: 'flare', ROLLOUT: L('rulare și frânare', 'rollout and braking'), MAN: 'manual', OFF: '—' };
+    const m = { WAITTO: L('așteaptă autorizarea de decolare', 'waiting for takeoff clearance'), AUTOTO: L('decolare automată', 'automatic takeoff'), STOPOVER: L('escală', 'stopover'), TAKEOFF: L('urcare inițială', 'initial climb'), NAV: L('în drum spre destinație', 'en route to destination'), LOC: L('aliniat cu pista', 'aligned with the runway'), GS: L('pe panta de coborâre', 'on the glide path'), FLARE: 'flare', ROLLOUT: L('rulare și frânare', 'rollout and braking'), MAN: 'manual', OFF: '—' };
     return m[AP.phase] || AP.phase;
   }
 
@@ -1699,7 +1726,7 @@ function gcrMain() {
         ['Shift+N', L('arată/ascunde panoul', 'show/hide the panel')], ['Shift+M', L('arată/ascunde harta', 'show/hide the map')], ['Shift+P', L('zbor complet / oprește / pleacă din escală', 'full flight / stop / leave stopover')], ['Shift+H', L('arată/ascunde HUD-ul', 'show/hide the HUD')], ['Shift+L', L('activează/oprește apropierea', 'start/stop approach')],
         ['Shift+R', L('teleportare pe finală', 'teleport to final')], ['Shift+A', L('cuplează AP și ține valorile actuale', 'engage AP and hold current values')], ['Shift+↑/↓', L('AP altitudine ±1000 ft', 'AP altitude ±1000 ft')],
         ['Shift+←/→', L('AP cap ±5°', 'AP heading ±5°')], ['Shift+PgUp/PgDn', L('AP viteză ±10 kt', 'AP speed ±10 kt')], ['Shift+G', L('tren jos/sus', 'gear down/up')], ['Shift+F', L('flaps complet / retrase', 'flaps full / up')],
-        ['Shift+S', L('spoilere', 'spoilers')], ['Shift+E', L('motoare pornit/oprit', 'engines on/off')], ['Shift+C', L('cameră următoare', 'next camera')], ['Shift+X', L('ultima aterizare', 'last landing')],
+        ['Shift+S', L('spoilere', 'spoilers')], ['Shift+E', L('motoare pornit/oprit', 'engines on/off')], ['Shift+C', L('cameră următoare', 'next camera')], ['Shift+X', L('ultima aterizare', 'last landing')], ['Shift+Y / U', L('ATC: accept / refuz', 'ATC: accept / unable')],
       ].map(([k, d]) => `<div><span class="gcr-kbd">${k}</span> ${d}</div>`).join('') }),
       el('b', { style: 'display:block;margin-top:8px' }, L('Ultimele aterizări', 'Recent landings')), hist,
       about,
@@ -1772,6 +1799,20 @@ function gcrMain() {
       const left = Math.max(0, Math.ceil((TRIP.departAt - Date.now()) / 1000));
       return [[L(`ESCALĂ la ${aptName(TRIP.lastApt || AP.rwy.apt)} · plecăm spre ${dest} în ${left} s`, `STOPOVER at ${aptName(TRIP.lastApt || AP.rwy.apt)} · departing for ${dest} in ${left} s`), 'h'],
         [L(`Următoarea etapă: ${g ? fmt(g.pathNm) + ' NM' : ''} · Shift+P = pleacă acum`, `Next leg: ${g ? fmt(g.pathNm) + ' NM' : ''} · Shift+P = leave now`)], [L('Avionul va fi mutat la începutul pistei și decolează automat.', 'The aircraft will be moved to the start of the runway and take off automatically.'), 'm']];
+    }
+    if (AP.phase === 'FLARE' || AP.phase === 'ROLLOUT') return [[L('ATERIZARE – flare și frânare', 'LANDING – flare and braking'), 'h']];
+    if (AP.phase === 'WAITTO') {
+      const near = nearestAirports(...sim.lla().slice(0, 2), 1)[0];
+      const human = near && humanAtcAt(near.apt);
+      return [[L('AȘTEPTĂM AUTORIZAREA DE DECOLARE', 'WAITING FOR TAKEOFF CLEARANCE'), 'h'],
+        [human ? L(`Controlor: ${human.cs} – cererea a fost trimisă.`, `Controller: ${human.cs} – request sent.`) : L('Turnul virtual verifică pista și finala…', 'The virtual tower is checking the runway and final…')],
+        [L('Shift+P anulează.', 'Shift+P cancels.'), 'm']];
+    }
+    if (ATC.vector && !sim.onGround()) {
+      const vct = ATC.vector;
+      lines.push([`ATC: ${vct.hold ? L('așteptare (orbită)', 'holding') : vct.hdg != null ? L('cap ', 'heading ') + pad3(vct.hdg) + '°' : ''}${vct.alt != null ? ' · ' + vct.alt + ' ft' : ''}${vct.spd != null ? ' · ' + vct.spd + ' kt' : ''}`, 'h']);
+      lines.push([L('Instrucțiune de la controlor – navigația proprie e suspendată până la „Reia navigația”.', 'Controller instruction – own navigation suspended until “Resume nav”.'), 'm']);
+      return lines;
     }
     if (AP.phase === 'AUTOTO' && TO.active) {
       const vr = TO.vr, k = Math.round(v.kias || 0);
@@ -1993,6 +2034,507 @@ function gcrMain() {
     }
   };
 
+  /* =====================================================================
+   *  ATC – CONTROL DE TRAFIC AERIAN
+   *  Transport: chatul GeoFS (max. 70 de caractere / mesaj, necesită login în GeoFS).
+   *  Format mesaj:  "@DESTINATAR text lizibil #COD [argument]"
+   *    controlor → pilot:  #TO rwy  #LU rwy  #LD rwy  #GA  #HOLD  #RES  #HDG deg  #ALT ft  #SPD kt  #SEQ n  #MSG
+   *    pilot → controlor:  #RQTO rwy  #RQLD rwy  #WILCO cod  #UNABLE cod
+   *    anunț controlor:    "... #ATC ICAO"  (la 60 s)   /   "... #ATCOFF ICAO"
+   *  Fără controlor om: turn virtual local, pe baza pozițiilor din multiplayer-ul GeoFS.
+   * ===================================================================== */
+  const ATC = {
+    stations: {},          // controlori om cunoscuți: { ICAO: { cs, t } }
+    log: [],               // { t, from, text, dir: 'in'|'out'|'sys' }
+    pending: null,         // pilot: instrucțiune ce așteaptă confirmare
+    vector: null,          // pilot: { hdg, alt, spd, hold:{lat,lon} }
+    toClr: false, landClr: false, landReqSent: false, toReqSent: false, inbSent: false,
+    requests: {},          // controlor: { callsign: { code, arg, t } }
+    acks: {},              // controlor: ultima confirmare de la fiecare pilot
+    outQ: [], lastSend: 0, lastBeat: 0, warnedLogin: false,
+    sel: null,             // controlor: callsign selectat
+    autoT: 0, autoMsgs: {},
+  };
+  const ATC_CODES_ACTION = ['TO', 'LU', 'LD', 'GA', 'HOLD', 'RES', 'HDG', 'ALT', 'SPD'];
+
+  function myCallsign() {
+    const u = geofs.userRecord || {};
+    let cs = u.callsign;
+    if (!cs) { const e = document.querySelector('.geofs-callsign'); cs = e ? e.textContent.trim() : ''; }
+    return (cs || 'Foo').trim();
+  }
+  const geofsLoggedIn = () => !!(geofs.userRecord && geofs.userRecord.id);
+
+  function atcLog(from, text, dir) {
+    ATC.log.unshift({ t: Date.now(), from, text, dir });
+    ATC.log = ATC.log.slice(0, 40);
+    ui.renderAtc && ui.renderAtc();
+  }
+  /** Pune un mesaj în coada de chat (GeoFS trimite câte unul la fiecare actualizare). */
+  function atcSend(text) {
+    text = text.replace(/\s+/g, ' ').trim();
+    if (text.length > 70) { // păstrăm codul de la final, scurtăm textul lizibil
+      const i = text.lastIndexOf('#'); const code = i >= 0 ? text.slice(i) : '';
+      text = text.slice(0, 70 - code.length - 2).trim() + '… ' + code;
+    }
+    ATC.outQ.push(text);
+    atcLog(myCallsign(), text, 'out');
+    if (!geofsLoggedIn() && !ATC.warnedLogin) {
+      ATC.warnedLogin = true;
+      ui.toast(L('Chatul GeoFS cere login – conectează-te în GeoFS ca mesajele ATC să ajungă la ceilalți.', 'GeoFS chat requires login – sign in to GeoFS so ATC messages reach other pilots.'), 9000);
+    }
+  }
+  function atcFlushQueue() {
+    if (!ATC.outQ.length || !window.multiplayer) return;
+    if (multiplayer.chatMessage || Date.now() - ATC.lastSend < 2200) return;
+    multiplayer.setChatMessage(ATC.outQ.shift());
+    ATC.lastSend = Date.now();
+  }
+
+  function parseAtc(msg) {
+    const m = msg.match(/#([A-Z]+)(?:\s+([A-Z0-9.\-]+))?\s*$/);
+    if (!m) return null;
+    const to = msg.startsWith('@') ? msg.slice(1, msg.indexOf(' ') > 0 ? msg.indexOf(' ') : undefined) : null;
+    return { code: m[1], arg: m[2] || '', to, text: msg.replace(/\s*#[A-Z]+(?:\s+\S+)?\s*$/, '') };
+  }
+  function addressedToMe(msg) { const me = myCallsign(); return msg.startsWith('@' + me + ' ') || msg === '@' + me; }
+
+  /** Primește toate mesajele din chatul GeoFS. */
+  function atcOnChat(d) {
+    let msg = ''; try { msg = decodeURIComponent(d.msg || ''); } catch (e) { msg = d.msg || ''; }
+    const from = d.cs || '?';
+    if (!msg || from === myCallsign()) return;
+    const p = parseAtc(msg); if (!p) return;
+    if (p.code === 'ATC' && p.arg) { ATC.stations[p.arg.toUpperCase()] = { cs: from, t: Date.now() }; ui.renderAtc && ui.renderAtc(); return; }
+    if (p.code === 'ATCOFF' && p.arg) { delete ATC.stations[p.arg.toUpperCase()]; ui.renderAtc && ui.renderAtc(); return; }
+    if (!addressedToMe(msg)) return;
+    atcLog(from, msg, 'in');
+    if (settings.atcRole === 'ctrl') {
+      if (p.code === 'RQTO' || p.code === 'RQLD') { ATC.requests[from] = { code: p.code, arg: p.arg, t: Date.now() }; say(p.code === 'RQTO' ? 'Departure request' : 'Landing request'); }
+      if (p.code === 'WILCO' || p.code === 'UNABLE') ATC.acks[from] = { code: p.code, arg: p.arg, t: Date.now() };
+      ui.renderAtc && ui.renderAtc();
+      return;
+    }
+    // pilot: instrucțiune de la controlor
+    const words = p.text.replace('@' + myCallsign(), '').trim();
+    say(words, 0);
+    if (ATC_CODES_ACTION.includes(p.code)) {
+      ATC.pending = { code: p.code, arg: p.arg, text: words, from, t: Date.now() };
+      ui.showAtcCard();
+    } else ui.toast('ATC ' + from + ': ' + words, 8000);
+  }
+  function hookChat() {
+    if (!window.ui || !window.ui.chat || window.ui.chat.__gcr) return;
+    const orig = window.ui.chat.publish;
+    window.ui.chat.publish = function (d) { try { atcOnChat(d); } catch (e) { console.error('[GeoFS Copilot] atc', e); } return orig.apply(this, arguments); };
+    window.ui.chat.__gcr = true;
+  }
+  // atenție: în acest fișier `ui` e interfața pluginului; chatul GeoFS e în window.ui
+
+  /* ---------------- Trafic (din multiplayer-ul GeoFS) ---------------- */
+  function getTraffic() {
+    const out = []; const users = (window.multiplayer && multiplayer.users) || {};
+    for (const id in users) {
+      const u = users[id]; const lu = u && u.lastUpdate; if (!lu || !lu.co) continue;
+      out.push({ id, cs: u.callsign || (u.isTraffic ? 'TFC' : '?'), lat: lu.co[0], lon: lu.co[1], altM: lu.co[2], hdg: norm360(lu.co[3] || 0),
+        kias: (lu.st && lu.st.as) || 0, gear: lu.st ? !!lu.st.gr : true, ai: !!u.isTraffic, age: Date.now() - (u.lastHeartbeatTime || 0) });
+    }
+    return out;
+  }
+  function trafficVsRunway(t, r, elevM) {
+    const ac = alongCross(r.lat, r.lon, r.hdg, t.lat, t.lon);
+    return { ac, hgt: (t.altM - elevM) / FT, onRwy: Math.abs(ac.cross) < (r.widFt * FT) / 2 + 30 && ac.along > -150 && ac.along < r.lenFt * FT + 150 && (t.altM - elevM) / FT < 150,
+      onFinal: ac.along < 0 && -ac.along < 8 * NM && Math.abs(ac.cross) < 1.2 * NM && (t.altM - elevM) / FT < 4000 && Math.abs(norm180(t.hdg - r.hdg)) < 50 };
+  }
+  function humanAtcAt(apt) { const s = apt && ATC.stations[apt]; return s && Date.now() - s.t < 180000 ? s : null; }
+
+  /* ---------------- Pilot: aplicarea instrucțiunilor ---------------- */
+  function atcAccept() {
+    const p = ATC.pending; if (!p) return;
+    ATC.pending = null; ui.hideAtcCard();
+    atcSend(`@${p.from} wilco ${p.text.split(' ').slice(0, 5).join(' ')} #WILCO ${p.code}`);
+    const v = sim.v();
+    const apAlt = geofs.autopilot.on && geofs.autopilot.values.altitude ? Math.round(geofs.autopilot.values.altitude / 100) * 100 : Math.round(sim.altFt() / 100) * 100;
+    switch (p.code) {
+      case 'TO': ATC.toClr = true; ATC.lastToRwy = p.arg; if (AP.phase === 'WAITTO') { if (!autoTakeoffStart()) engageFull(); } else if (sim.onGround()) engageFull(); break;
+      case 'LU': atcLineUp(p.arg); break;
+      case 'LD': ATC.landClr = true; ui.toast(L('Autorizat la aterizare.', 'Cleared to land.')); break;
+      case 'GA': goAround(L('la cererea controlorului', 'requested by ATC')); break;
+      case 'RES': ATC.vector = null; ui.toast(L('Navigație proprie reluată.', 'Resuming own navigation.')); break;
+      case 'HOLD': ATC.vector = { hold: { lat: sim.lla()[0], lon: sim.lla()[1] }, alt: Math.round(sim.altFt() / 100) * 100 }; break;
+      case 'HDG': ATC.vector = Object.assign(ATC.vector || { alt: apAlt }, { hdg: norm360(+p.arg), hold: null }); break;
+      case 'ALT': ATC.vector = Object.assign(ATC.vector || { hdg: Math.round(norm360(v.heading)) }, { alt: +p.arg }); break;
+      case 'SPD': ATC.vector = Object.assign(ATC.vector || { hdg: Math.round(norm360(v.heading)), alt: apAlt }, { spd: +p.arg }); break;
+    }
+    if (ATC.vector && !sim.onGround()) { if (apOn()) { AP.active = true; if (AP.phase === 'MAN' || AP.phase === 'OFF') AP.phase = 'NAV'; } }
+    ui.renderAtc(); ui.renderNav && ui.renderNav();
+  }
+  function atcRefuse() {
+    const p = ATC.pending; if (!p) return;
+    ATC.pending = null; ui.hideAtcCard();
+    atcSend(`@${p.from} unable #UNABLE ${p.code}`);
+    ui.renderAtc();
+  }
+  function atcLineUp(ident) {
+    const near = nearestAirports(...sim.lla().slice(0, 2), 1)[0]; if (!near || near.d > 5 * NM) return;
+    const rws = DB.airports.get(near.apt) || [];
+    const r = rws.find((x) => x.ident === ident) || bestRunwayForDeparture(near.apt);
+    positionOnRunway(r, () => { AP.phase = 'WAITTO'; AP.active = true; AP.full = true; ui.renderNav && ui.renderNav(); });
+  }
+  function goAround(why) {
+    if (!AP.rwy) return;
+    say('Going around', 0);
+    ui.toast(L('RATARE (go around) – ', 'GO AROUND – ') + why, 8000);
+    ATC.landClr = false; ATC.landReqSent = false;
+    if (!apOn()) return;
+    AP.active = true; AP.phase = 'NAV';
+    releaseVS();
+    geofs.autopilot.setSpeed(AP.vapp + 30);
+    if (controls.gear.target === 0) controls.setters.setGearUp.set();
+    const steps = sim.flapsSteps(); if (steps) setFlaps(Math.ceil(steps / 3));
+    buildRoute(); drawApproach();
+    AP.goAroundUntil = Date.now() + 25000; // urcare fermă câteva secunde
+    setVS(1500);
+  }
+
+  /** Apelată din bucla de ghidare. Întoarce true dacă a comandat ea autopilotul. */
+  function atcGuidance(st) {
+    const v = sim.v(), ap = geofs.autopilot;
+    if (AP.goAroundUntil && Date.now() < AP.goAroundUntil) {
+      setVS(1500); ap.setAltitude(Math.round((AP.fafAlt / FT + 1000) / 100) * 100);
+      if (sim.altFt() > AP.fafAlt / FT + 800) AP.goAroundUntil = 0;
+      return 'GA'; // lateral: traseul nou (circuit), vertical: urcare
+    }
+    if (ATC.vector && !sim.onGround()) {
+      const vec = ATC.vector; const [lat, lon] = sim.lla();
+      releaseVS();
+      if (vec.alt != null) ap.setAltitude(vec.alt);
+      if (vec.spd != null) ap.setSpeed(vec.spd);
+      if (vec.hold) { // orbită de așteptare (viraje la dreapta, raza ~2.5 NM)
+        const d = distM(lat, lon, vec.hold.lat, vec.hold.lon), R = 2.5 * NM;
+        const toC = bearing(lat, lon, vec.hold.lat, vec.hold.lon);
+        ap.setCourse(norm360(toC - 90 + clamp(((d - R) / R) * 60, -45, 45)), true);
+      } else if (vec.hdg != null) ap.setCourse(vec.hdg, true);
+      return true;
+    }
+    // autorizarea de aterizare
+    if (!st || !AP.rwy || sim.onGround() || st.distBefore < 0 || st.distBefore > 12 * NM) return false;
+    const human = humanAtcAt(AP.rwy.apt);
+    if (human) {
+      if (!ATC.landReqSent && st.distBefore < 12 * NM) {
+        ATC.landReqSent = true;
+        atcSend(`@${human.cs} ${Math.round(st.distBefore / NM)}NM final ${AP.rwy.ident} #RQLD ${AP.rwy.ident}`);
+      }
+      if (!ATC.landClr && st.hatFt < 500 && (AP.phase === 'GS' || AP.phase === 'LOC')) { goAround(L('fără autorizare de aterizare', 'no landing clearance')); return 'GA'; }
+    } else if (settings.atcAuto) {
+      const auto = autoTower();
+      if (auto && st.distBefore < 4 * NM && !ATC.landClr) {
+        if (!auto.rwyBusy) { ATC.landClr = true; atcLog(L('Turn virtual', 'Virtual tower'), `cleared to land ${AP.rwy.ident}`, 'sys'); say('Cleared to land', 0); }
+      }
+      if (auto && st.hatFt < 400 && st.distBefore > 0 && (auto.rwyBusy || (auto.ahead && auto.ahead.gapNm < 1.2))) {
+        if (AP.phase === 'GS' || AP.phase === 'LOC' || AP.phase === 'FLARE') { goAround(auto.rwyBusy ? L('pista e ocupată', 'runway occupied') : L('trafic prea aproape în față', 'traffic too close ahead')); return 'GA'; }
+      }
+    }
+    return false;
+  }
+
+  /** Turnul virtual: starea pistei și a finalei, calculată local din trafic. */
+  function autoTower(rwy) {
+    const r = rwy || AP.rwy; if (!r || !DB.loaded) return null;
+    const elev = AP.rwy === r ? AP.thrElevM : (sim.onGround() && geofs.groundElevation ? geofs.groundElevation : r.elevFt * FT);
+    const [lat, lon] = sim.lla(); const meAc = alongCross(r.lat, r.lon, r.hdg, lat, lon);
+    let rwyBusy = false, arrivals = [];
+    getTraffic().forEach((t) => {
+      if (t.age > 15000 || distM(t.lat, t.lon, r.lat, r.lon) > 15 * NM) return;
+      const k = trafficVsRunway(t, r, elev);
+      // pista: orice avion pe pistă; pentru capătul opus verificăm și direcția inversă
+      if (k.onRwy && (t.kias > 3 || Math.abs(k.ac.cross) < (r.widFt * FT) / 2 + 10)) rwyBusy = true;
+      if (k.onFinal) arrivals.push({ t, dist: -k.ac.along / NM });
+    });
+    arrivals.sort((a, b) => a.dist - b.dist);
+    const myDist = -meAc.along / NM;
+    const ahead = arrivals.filter((a) => a.dist < myDist);
+    const near = ahead.length ? ahead[ahead.length - 1] : null;
+    return { rwyBusy, arrivals, number: ahead.length + 1, ahead: near ? { cs: near.t.cs, gapNm: myDist - near.dist } : null, nextArrivalNm: arrivals.length ? arrivals[0].dist : null };
+  }
+
+  /** La sol, înainte de decolare: cerem autorizarea (om) sau verificăm pista (automat). True = așteptăm. */
+  function atcHoldForTakeoff() {
+    if (ATC.toClr) return false;
+    const near = nearestAirports(...sim.lla().slice(0, 2), 1)[0];
+    if (!near || near.d > 5 * NM) return false;
+    const human = humanAtcAt(near.apt);
+    if (!human && !settings.atcAuto) return false;
+    const onRwy = runwayUnderAircraft();
+    const start = () => {
+      AP.active = true; AP.full = true; AP.phase = 'WAITTO';
+      const r = runwayUnderAircraft();
+      if (human && !ATC.toReqSent) { ATC.toReqSent = true; atcSend(`@${human.cs} ready for departure ${r ? r.ident : ''} #RQTO ${r ? r.ident : ''}`); }
+      ui.renderNav && ui.renderNav();
+    };
+    if (!onRwy) {
+      const dep = bestRunwayForDeparture(near.apt);
+      if (human) { start(); return true; } // cu controlor om: așteptăm „line up” sau „cleared takeoff”
+      positionOnRunway(dep, start);
+      return true;
+    }
+    start();
+    return true;
+  }
+  /** În faza WAITTO: turnul virtual dă autorizarea când pista și finala sunt libere. */
+  function atcWaitTick() {
+    if (AP.phase !== 'WAITTO') return;
+    controls.throttle = 0; controls.brakes = 1; sim.ac().brakesOn = true;
+    const near = nearestAirports(...sim.lla().slice(0, 2), 1)[0]; if (!near) return;
+    if (humanAtcAt(near.apt)) return; // așteptăm controlorul
+    if (Date.now() - ATC.autoT < 2000) return; ATC.autoT = Date.now();
+    const r = runwayUnderAircraft(); if (!r) return;
+    const tw = autoTower(r);
+    if (!tw) return;
+    const others = tw.rwyBusy && getTraffic().some((t) => t.age < 15000 && trafficVsRunway(t, r, geofs.groundElevation || r.elevFt * FT).onRwy && distM(t.lat, t.lon, ...sim.lla().slice(0, 2)) > 60);
+    if (!others && (tw.nextArrivalNm == null || tw.nextArrivalNm > 4)) {
+      ATC.toClr = true;
+      atcLog(L('Turn virtual', 'Virtual tower'), `runway ${r.ident} cleared for takeoff`, 'sys'); say('Cleared for takeoff', 0);
+      if (!autoTakeoffStart()) engageFull();
+    } else if (!ATC.autoMsgs.hold || Date.now() - ATC.autoMsgs.hold > 20000) {
+      ATC.autoMsgs.hold = Date.now();
+      const why = others ? L('pista e ocupată', 'runway occupied') : L(`trafic pe finală la ${tw.nextArrivalNm.toFixed(1)} NM`, `traffic on final at ${tw.nextArrivalNm.toFixed(1)} NM`);
+      atcLog(L('Turn virtual', 'Virtual tower'), L('Așteaptă: ', 'Hold position: ') + why, 'sys');
+    }
+  }
+
+  /** La 10 Hz: coada de chat, anunțul controlorului, resetări între etape. */
+  function atcTick() {
+    atcFlushQueue();
+    if (settings.atcRole === 'ctrl' && settings.atcStation && Date.now() - ATC.lastBeat > 60000) {
+      ATC.lastBeat = Date.now();
+      const a = DB.info.get(settings.atcStation);
+      atcSend(`${a ? (a.city || a.name).slice(0, 18) : settings.atcStation} Tower online${settings.atcRwy ? ', rwy ' + settings.atcRwy : ''} #ATC ${settings.atcStation}`);
+    }
+    if (settings.atcRole !== 'ctrl') {
+      atcWaitTick();
+      // după aterizare, autorizările se resetează pentru etapa următoare
+      if (sim.onGround() && (sim.v().groundSpeedKnt || 0) < 30 && ATC.landClr) { ATC.landClr = false; ATC.landReqSent = false; }
+      if (!sim.onGround() && ATC.toClr && sim.v().haglFeet > 1500) { ATC.toClr = false; ATC.toReqSent = false; }
+      if (ATC.pending && Date.now() - ATC.pending.t > 60000) { ATC.pending = null; ui.hideAtcCard(); }
+    }
+  }
+
+  /* ---------------- Interfață ATC ---------------- */
+  function buildAtcPage(p) {
+    const role = el('select', {}, el('option', { value: 'pilot' }, L('Pilot', 'Pilot')), el('option', { value: 'ctrl' }, L('Controlor de trafic (ATC)', 'Air traffic controller (ATC)')));
+    role.value = settings.atcRole === 'ctrl' ? 'ctrl' : 'pilot';
+    const auto = el('input', { type: 'checkbox' }); auto.checked = settings.atcAuto !== false;
+    auto.addEventListener('change', () => { settings.atcAuto = auto.checked; saveSettings(); });
+    const pilotBox = el('div'), ctrlBox = el('div');
+    const logBox = el('div', { class: 'gcr-atclog' });
+    const status = el('div', { class: 'gcr-here' });
+    // pilot
+    const free = el('input', { placeholder: L('Mesaj către controlor…', 'Message to controller…'), style: 'flex:1;min-width:0', maxlength: 50 });
+    const sendFree = () => { const st = currentAtcFor(); if (!st || !free.value.trim()) return; atcSend(`@${st.cs} ${free.value.trim()} #MSG`); free.value = ''; };
+    free.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendFree(); });
+    pilotBox.append(
+      el('div', { class: 'gcr-row' }, el('label', { style: 'min-width:0' }, auto, ' ', L('Turn virtual automat când nu e controlor om', 'Automatic virtual tower when no human controller'))),
+      el('div', { class: 'gcr-row' },
+        el('button', { class: 'gcr-btn sm', onclick: () => { const st = currentAtcFor(); const r = runwayUnderAircraft(); if (st) atcSend(`@${st.cs} ready for departure ${r ? r.ident : ''} #RQTO ${r ? r.ident : ''}`); else ui.toast(L('Niciun controlor om la acest aeroport.', 'No human controller at this airport.')); } }, L('Cere decolarea', 'Request takeoff')),
+        el('button', { class: 'gcr-btn sm', onclick: () => { const st = AP.rwy && humanAtcAt(AP.rwy.apt); if (st) atcSend(`@${st.cs} request landing ${AP.rwy.ident} #RQLD ${AP.rwy.ident}`); else ui.toast(L('Niciun controlor om la destinație.', 'No human controller at the destination.')); } }, L('Cere aterizarea', 'Request landing'))),
+      el('div', { class: 'gcr-row' }, free, el('button', { class: 'gcr-btn sm', onclick: sendFree }, L('Trimite', 'Send'))));
+    // controlor
+    const stIn = el('input', { placeholder: L('Aeroport (oraș sau cod)', 'Airport (city or code)'), style: 'flex:1;min-width:0', value: settings.atcStation || '' });
+    const rwSel = el('select', {});
+    const fillRw = () => {
+      rwSel.innerHTML = ''; const rws = DB.airports.get(settings.atcStation) || [];
+      rws.forEach((r) => rwSel.append(el('option', { value: r.ident }, r.ident)));
+      if (!settings.atcRwy && rws.length) settings.atcRwy = (bestRunway(settings.atcStation) || rws[0]).ident;
+      rwSel.value = settings.atcRwy || '';
+    };
+    rwSel.addEventListener('change', () => { settings.atcRwy = rwSel.value; saveSettings(); });
+    const setStation = () => {
+      if (!DB.loaded) { ui.toast(L('Baza de date încă se încarcă…', 'The database is still loading…')); return; }
+      const q = stIn.value.trim(); const code = q.toUpperCase();
+      const apt = DB.airports.has(code) ? code : (searchAirports(q, ...sim.lla().slice(0, 2))[0] || {}).apt;
+      if (!apt) { ui.toast(L('Nu am găsit aeroportul.', 'Airport not found.')); return; }
+      if (settings.atcStation && settings.atcStation !== apt) atcSend(`Tower closed #ATCOFF ${settings.atcStation}`);
+      settings.atcStation = apt; settings.atcRwy = ''; saveSettings(); stIn.value = apt; fillRw(); ATC.lastBeat = 0;
+      openAtcWindow(); ui.renderAtc();
+    };
+    ctrlBox.append(
+      el('div', { class: 'gcr-row' }, stIn, el('button', { class: 'gcr-btn pri sm', onclick: setStation }, L('Preia turnul', 'Open tower'))),
+      el('div', { class: 'gcr-row' }, el('label', {}, L('Pista activă', 'Active runway')), rwSel,
+        el('button', { class: 'gcr-btn sm', onclick: () => openAtcWindow() }, L('Deschide radarul', 'Open radar')),
+        el('button', { class: 'gcr-btn sm warn', onclick: () => { if (settings.atcStation) atcSend(`Tower closed #ATCOFF ${settings.atcStation}`); settings.atcStation = ''; saveSettings(); closeAtcWindow(); ui.renderAtc(); } }, L('Închide turnul', 'Close tower'))));
+    role.addEventListener('change', () => { settings.atcRole = role.value; saveSettings(); if (role.value !== 'ctrl') { if (settings.atcStation) atcSend(`Tower closed #ATCOFF ${settings.atcStation}`); closeAtcWindow(); } ui.renderAtc(); });
+    p.append(el('div', { class: 'gcr-row' }, el('label', {}, L('Rol', 'Role')), role), status, pilotBox, ctrlBox,
+      el('b', { style: 'display:block;margin-top:8px' }, L('Mesaje ATC', 'ATC messages')), logBox,
+      el('div', { class: 'gcr-muted', style: 'margin-top:6px' }, L('Mesajele merg prin chatul GeoFS (trebuie să fii logat în GeoFS). Shift+Y = accept, Shift+U = refuz.', 'Messages go through the GeoFS chat (you must be signed in to GeoFS). Shift+Y = accept, Shift+U = refuse.')));
+    ui.renderAtc = () => {
+      const ctrl = settings.atcRole === 'ctrl';
+      pilotBox.style.display = ctrl ? 'none' : ''; ctrlBox.style.display = ctrl ? '' : 'none';
+      if (ctrl) { if (DB.loaded && settings.atcStation && !rwSel.options.length) fillRw(); }
+      const me = myCallsign();
+      status.innerHTML = '';
+      if (ctrl) {
+        status.append(el('div', {}, L('Indicativul tău: ', 'Your callsign: '), el('b', {}, me), geofsLoggedIn() ? '' : el('span', { style: 'color:#ff8a80' }, L(' · nelogat în GeoFS', ' · not signed in to GeoFS'))),
+          el('div', { class: 'gcr-muted' }, settings.atcStation ? L(`Controlezi ${aptName(settings.atcStation)} (${settings.atcStation})`, `Controlling ${aptName(settings.atcStation)} (${settings.atcStation})`) : L('Alege aeroportul pe care îl controlezi.', 'Choose the airport you control.')));
+      } else {
+        const st = currentAtcFor();
+        const apt = AP.rwy ? AP.rwy.apt : null;
+        status.append(...[el('div', {}, L('Indicativul tău: ', 'Your callsign: '), el('b', {}, me), geofsLoggedIn() ? '' : el('span', { style: 'color:#ff8a80' }, L(' · nelogat în GeoFS', ' · not signed in to GeoFS'))),
+          el('div', { class: 'gcr-muted' }, st ? L(`Controlor la ${st.apt}: ${st.cs}`, `Controller at ${st.apt}: ${st.cs}`) : (settings.atcAuto !== false ? L('Fără controlor om – turnul virtual automat e activ.', 'No human controller – automatic virtual tower active.') : L('Fără controlor.', 'No controller.'))),
+          el('div', { class: 'gcr-muted' }, Object.keys(ATC.stations).filter((k) => humanAtcAt(k)).length ? L('Turnuri active: ', 'Active towers: ') + Object.keys(ATC.stations).filter((k) => humanAtcAt(k)).map((k) => `${k} (${ATC.stations[k].cs})`).join(', ') : ''),
+          apt && (ATC.landClr || ATC.toClr) ? el('div', { style: 'color:#4cff8f' }, (ATC.toClr ? L('✓ Autorizat la decolare', '✓ Cleared for takeoff') : '') + (ATC.landClr ? L('✓ Autorizat la aterizare', '✓ Cleared to land') : '')) : null].filter(Boolean));
+      }
+      logBox.innerHTML = ATC.log.length ? '' : `<div class="gcr-muted">${L('Niciun mesaj încă.', 'No messages yet.')}</div>`;
+      ATC.log.slice(0, 15).forEach((m) => logBox.append(el('div', { class: 'gcr-atcmsg ' + m.dir },
+        el('span', { class: 'gcr-muted' }, new Date(m.t).toTimeString().slice(0, 5) + ' '), el('b', {}, m.from + ': '), m.text)));
+    };
+    ui.renderAtc();
+  }
+  /** Controlorul om pentru aeroportul relevant (cel de lângă tine la sol, altfel destinația). */
+  function currentAtcFor() {
+    if (sim.onGround()) {
+      const near = DB.loaded ? nearestAirports(...sim.lla().slice(0, 2), 1)[0] : null;
+      if (near && near.d < 5 * NM) { const s = humanAtcAt(near.apt); if (s) return { apt: near.apt, cs: s.cs }; }
+    }
+    if (AP.rwy) { const s = humanAtcAt(AP.rwy.apt); if (s) return { apt: AP.rwy.apt, cs: s.cs }; }
+    return null;
+  }
+
+  // card de instrucțiune pentru pilot
+  ui.showAtcCard = () => {
+    let c = document.getElementById('gcr-atccard');
+    if (!c) {
+      c = el('div', { id: 'gcr-atccard' });
+      ['mousedown', 'pointerdown'].forEach((t) => c.addEventListener(t, (e) => e.stopPropagation()));
+      document.body.append(c);
+    }
+    const p = ATC.pending; if (!p) return;
+    c.innerHTML = '';
+    c.append(el('div', { class: 'gcr-muted' }, 'ATC · ' + p.from), el('div', { class: 'big' }, p.text),
+      el('div', { class: 'gcr-row', style: 'justify-content:center;margin-top:6px' },
+        el('button', { class: 'gcr-btn ok', onclick: atcAccept }, L('✓ Accept (Shift+Y)', '✓ Accept (Shift+Y)')),
+        el('button', { class: 'gcr-btn warn', onclick: atcRefuse }, L('✕ Refuz (Shift+U)', '✕ Unable (Shift+U)'))));
+    c.style.display = 'block';
+  };
+  ui.hideAtcCard = () => { const c = document.getElementById('gcr-atccard'); if (c) c.style.display = 'none'; };
+
+  /* ---------------- Fereastra controlorului: radar + benzi de trafic ---------------- */
+  const ATCW = { range: 10 };
+  function closeAtcWindow() { const w = document.getElementById('gcr-atcwin'); if (w) w.remove(); }
+  function openAtcWindow() {
+    if (document.getElementById('gcr-atcwin')) return;
+    const cv = el('canvas', { width: 460, height: 460 });
+    const strips = el('div', { class: 'gcr-strips' });
+    const cmd = el('div', { class: 'gcr-atccmd' });
+    const title = el('div', { class: 'gcr-ndgrip' }, el('span', {}, '📡 ' + L('Radar ATC – trage ca să muți', 'ATC radar – drag to move')),
+      el('span', {}, el('button', { class: 'gcr-btn sm', onclick: () => { ATCW.range = Math.min(80, ATCW.range * 2); } }, '−'), ' ',
+        el('button', { class: 'gcr-btn sm', onclick: () => { ATCW.range = Math.max(2.5, ATCW.range / 2); } }, '+'), ' ',
+        el('button', { class: 'gcr-btn sm', onclick: closeAtcWindow }, '✕')));
+    const w = el('div', { id: 'gcr-atcwin' }, title, el('div', { style: 'display:flex;gap:8px;align-items:flex-start' }, cv, el('div', { style: 'width:330px' }, strips, cmd)));
+    ['mousedown', 'pointerdown', 'wheel', 'touchstart'].forEach((t) => w.addEventListener(t, (e) => e.stopPropagation()));
+    ['keydown', 'keyup', 'keypress'].forEach((t) => w.addEventListener(t, (e) => { if (/INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) e.stopPropagation(); }));
+    w.addEventListener('wheel', (e) => { ATCW.range = clamp(e.deltaY > 0 ? ATCW.range * 1.25 : ATCW.range / 1.25, 2.5, 80); e.preventDefault(); }, { passive: false });
+    let drag = null;
+    title.addEventListener('mousedown', (e) => { if (e.target.tagName === 'BUTTON') return; const r = w.getBoundingClientRect(); drag = { dx: e.clientX - r.left, dy: e.clientY - r.top }; e.preventDefault(); });
+    window.addEventListener('mousemove', (e) => { if (drag) { w.style.left = clamp(e.clientX - drag.dx, 0, window.innerWidth - 100) + 'px'; w.style.top = clamp(e.clientY - drag.dy, 0, window.innerHeight - 60) + 'px'; } });
+    window.addEventListener('mouseup', () => { drag = null; });
+    cv.addEventListener('click', (e) => { // selectare avion pe radar
+      const r = cv.getBoundingClientRect(); const x = e.clientX - r.left, y = e.clientY - r.top;
+      let best = null, bd = 18; (ATCW.blips || []).forEach((b) => { const d = Math.hypot(b.x - x, b.y - y); if (d < bd) { bd = d; best = b; } });
+      if (best) { ATC.sel = best.cs; renderCmd(); }
+    });
+    document.body.append(w);
+    ATCW.cv = cv; ATCW.strips = strips; ATCW.cmd = cmd;
+
+    function renderCmd() {
+      cmd.innerHTML = '';
+      const cs = ATC.sel;
+      if (!cs) { cmd.append(el('div', { class: 'gcr-muted' }, L('Selectează un avion din listă sau de pe radar.', 'Select an aircraft from the list or the radar.'))); return; }
+      const rw = settings.atcRwy || '';
+      const send = (txt, code, arg) => atcSend(`@${cs} ${txt} #${code}${arg != null && arg !== '' ? ' ' + arg : ''}`);
+      const wind = (window.weather ? `wind ${pad3(weather.currentWindDirection || 0)}/${Math.round(weather.currentWindSpeed || 0)}` : '');
+      const B = (t, fn, cls) => el('button', { class: 'gcr-btn sm ' + (cls || ''), onclick: fn }, t);
+      const hdg = el('input', { type: 'number', placeholder: 'HDG', style: 'width:62px' });
+      const alt = el('input', { type: 'number', placeholder: 'ALT', step: 500, style: 'width:70px' });
+      const spd = el('input', { type: 'number', placeholder: 'SPD', step: 10, style: 'width:60px' });
+      const txt = el('input', { placeholder: L('Text liber…', 'Free text…'), maxlength: 45, style: 'flex:1;min-width:0' });
+      cmd.append(el('div', { style: 'margin:6px 0 4px' }, el('b', {}, cs), ' ', el('span', { class: 'gcr-muted' }, L('pista ', 'runway ') + rw)),
+        el('div', { class: 'gcr-row' },
+          B(L('Aliniere', 'Line up'), () => send(`line up and wait ${rw}`, 'LU', rw)),
+          B(L('Decolare', 'Takeoff'), () => send(`cleared takeoff ${rw} ${wind}`, 'TO', rw), 'ok'),
+          B(L('Aterizare', 'Landing'), () => send(`cleared to land ${rw} ${wind}`, 'LD', rw), 'ok'),
+          B(L('Ratare', 'Go around'), () => send('go around', 'GA'), 'warn')),
+        el('div', { class: 'gcr-row' },
+          B(L('Așteptare', 'Hold'), () => send('hold present position', 'HOLD')),
+          B(L('Reia navigația', 'Resume nav'), () => send('resume own navigation', 'RES')),
+          B('#1', () => send('number 1', 'SEQ', 1)), B('#2', () => send('number 2, follow traffic', 'SEQ', 2)), B('#3', () => send('number 3, follow traffic', 'SEQ', 3))),
+        el('div', { class: 'gcr-row' }, hdg, B('→', () => hdg.value && send(`turn heading ${pad3(+hdg.value)}`, 'HDG', pad3(+hdg.value))),
+          alt, B('→', () => alt.value && send(`${+alt.value > sim.altFt() ? 'climb' : 'maintain'} ${+alt.value} ft`, 'ALT', +alt.value)),
+          spd, B('→', () => spd.value && send(`speed ${+spd.value} kt`, 'SPD', +spd.value))),
+        el('div', { class: 'gcr-row' }, txt, B(L('Trimite', 'Send'), () => { if (txt.value.trim()) { send(txt.value.trim(), 'MSG'); txt.value = ''; } })));
+      const ack = ATC.acks[cs]; if (ack && Date.now() - ack.t < 120000) cmd.append(el('div', { class: 'gcr-muted' }, `${ack.code === 'WILCO' ? '✓' : '✕'} ${ack.code} ${ack.arg}`));
+    }
+    ATCW.renderCmd = renderCmd;
+    renderCmd();
+  }
+  function drawAtcWindow() {
+    if (!ATCW.cv || !document.getElementById('gcr-atcwin')) return;
+    const apt = settings.atcStation; const a = DB.info.get(apt); const rws = DB.airports.get(apt) || [];
+    if (!a && !rws.length) return;
+    const cLat = a ? a.lat : rws[0].lat, cLon = a ? a.lon : rws[0].lon;
+    const cv = ATCW.cv, x = cv.getContext('2d'), W = cv.width, H = cv.height, cx = W / 2, cy = H / 2, Rpx = W / 2 - 10, sc = Rpx / (ATCW.range * NM);
+    const cosLat = Math.cos(cLat * D2R);
+    const toXY = (la, lo) => [cx + (lo - cLon) * D2R * cosLat * R_EARTH * sc, cy - (la - cLat) * D2R * R_EARTH * sc];
+    x.fillStyle = '#02130a'; x.fillRect(0, 0, W, H);
+    x.strokeStyle = 'rgba(90,255,140,.25)'; x.lineWidth = 1;
+    [0.25, 0.5, 0.75, 1].forEach((f) => { x.beginPath(); x.arc(cx, cy, Rpx * f, 0, 7); x.stroke(); });
+    x.fillStyle = 'rgba(90,255,140,.5)'; x.font = '10px monospace';
+    [0.5, 1].forEach((f) => x.fillText((ATCW.range * f).toFixed(ATCW.range < 10 ? 1 : 0) + 'NM', cx + 3, cy - Rpx * f + 11));
+    // piste + prelungiri de ax pentru pista activă
+    rws.forEach((r) => {
+      const [x1, y1] = toXY(r.lat, r.lon), [x2, y2] = toXY(r.endLat, r.endLon);
+      x.strokeStyle = '#e8eef7'; x.lineWidth = 3; x.beginPath(); x.moveTo(x1, y1); x.lineTo(x2, y2); x.stroke();
+      if (r.ident === settings.atcRwy) {
+        const [fx, fy] = toXY(...destPoint(r.lat, r.lon, norm360(r.hdg + 180), 10 * NM));
+        x.strokeStyle = 'rgba(224,64,251,.6)'; x.setLineDash([6, 5]); x.lineWidth = 1.5; x.beginPath(); x.moveTo(x1, y1); x.lineTo(fx, fy); x.stroke(); x.setLineDash([]);
+        x.fillStyle = '#e040fb'; x.fillText(r.ident, x1 + 4, y1 + 12);
+      }
+    });
+    // trafic
+    const act = rws.find((r) => r.ident === settings.atcRwy);
+    const list = getTraffic().filter((t) => t.age < 20000 && distM(t.lat, t.lon, cLat, cLon) < ATCW.range * NM * 1.05);
+    // includem și avionul controlorului (dacă e în zonă)
+    ATCW.blips = [];
+    list.forEach((t) => {
+      const [px, py] = toXY(t.lat, t.lon); const sel = ATC.sel === t.cs; const req = ATC.requests[t.cs] && Date.now() - ATC.requests[t.cs].t < 300000;
+      const col = sel ? '#ffd54f' : req ? '#ff8a80' : t.ai ? '#80cbc4' : '#5cff8a';
+      x.strokeStyle = col; x.fillStyle = col; x.lineWidth = 1.5;
+      x.strokeRect(px - 3.5, py - 3.5, 7, 7);
+      const vlen = clamp(t.kias / 4, 4, 40); x.beginPath(); x.moveTo(px, py); x.lineTo(px + Math.sin(t.hdg * D2R) * vlen, py - Math.cos(t.hdg * D2R) * vlen); x.stroke();
+      x.font = sel ? 'bold 11px monospace' : '10px monospace';
+      const elevFt = act ? act.elevFt : (a ? a.elevFt : 0);
+      x.fillText(t.cs.slice(0, 12), px + 7, py - 4);
+      x.fillText(`${String(Math.max(0, Math.round(t.altM / FT / 100))).padStart(3, '0')} ${Math.round(t.kias)}kt${(t.altM / FT - elevFt) < 80 && t.kias < 50 ? ' GND' : ''}`, px + 7, py + 8);
+      ATCW.blips.push({ x: px, y: py, cs: t.cs });
+    });
+    // benzi de trafic (strips)
+    if (!ATCW.lastStrips || Date.now() - ATCW.lastStrips > 1000) {
+      ATCW.lastStrips = Date.now();
+      const sorted = list.slice().sort((p, q) => distM(p.lat, p.lon, cLat, cLon) - distM(q.lat, q.lon, cLat, cLon));
+      ATCW.strips.innerHTML = '';
+      ATCW.strips.append(el('div', { class: 'gcr-muted', style: 'margin-bottom:3px' }, `${aptName(apt)} · ${sorted.length} ${L('avioane', 'aircraft')}`));
+      sorted.slice(0, 14).forEach((t) => {
+        const d = distM(t.lat, t.lon, cLat, cLon) / NM; const req = ATC.requests[t.cs] && Date.now() - ATC.requests[t.cs].t < 300000 ? ATC.requests[t.cs] : null;
+        const k = act ? trafficVsRunway(t, act, act.elevFt * FT) : null;
+        const stTxt = k && k.onRwy ? L('PE PISTĂ', 'ON RWY') : k && k.onFinal ? L('FINALĂ', 'FINAL') : (t.altM / FT - (act ? act.elevFt : 0)) < 80 && t.kias < 50 ? L('SOL', 'GND') : '';
+        const row = el('div', { class: 'gcr-strip' + (ATC.sel === t.cs ? ' sel' : '') + (req ? ' req' : ''), onclick: () => { ATC.sel = t.cs; ATCW.renderCmd(); ATCW.lastStrips = 0; } },
+          el('b', {}, t.cs.slice(0, 14)), el('span', {}, `${Math.round(t.altM / FT)}ft ${Math.round(t.kias)}kt ${d.toFixed(1)}NM`),
+          el('span', { class: 'tag' }, (req ? (req.code === 'RQTO' ? L('cere decolare ', 'req TKOF ') : L('cere aterizare ', 'req LAND ')) + req.arg : '') + (stTxt ? ' ' + stTxt : '') + (t.ai ? ' AI' : '')));
+        ATCW.strips.append(row);
+      });
+    }
+  }
+
   /* ---------------- Taste rapide ---------------- */
   function bindKeys() {
     window.addEventListener('keydown', (e) => {
@@ -2002,7 +2544,9 @@ function gcrMain() {
       const actions = {
         N: () => ui.togglePanel(),
         M: () => toggleNd(),
-        P: () => (AP.phase === 'STOPOVER' ? departStopover() : (AP.active ? disengage() : engageFull())),
+        Y: () => atcAccept(),
+        U: () => atcRefuse(),
+        P: () => (AP.phase === 'STOPOVER' ? departStopover() : AP.phase === 'WAITTO' ? (AP.phase = 'MAN', AP.active = false, ui.renderNav()) : (AP.active ? disengage() : engageFull())),
         H: () => { settings.hudVisible = !settings.hudVisible; saveSettings(); ui.hud.style.display = settings.hudVisible ? '' : 'none'; },
         L: () => (AP.active ? disengage() : engage()),
         R: teleportFinal,

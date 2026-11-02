@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0
+- Air traffic control module: controller role with radar, traffic strips and clearances, sent over the GeoFS chat.
+- Pilots receive ATC instructions as Accept/Unable cards, and the autopilot carries them out (line up, takeoff, landing, go-around, hold, heading/altitude/speed vectors).
+- Automatic takeoff and landing requests; go-around at 500 ft without a landing clearance.
+- Virtual tower when no human controller is online: runway and final checks from GeoFS multiplayer traffic, with an automatic go-around if the runway is occupied.
+
 ## 1.3.0
 - English interface by default, Romanian available in Settings → Language / Limba.
 - "About" section in Settings (author, version, GitHub link).
