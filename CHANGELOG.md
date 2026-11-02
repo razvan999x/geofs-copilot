@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.1
+- The HUD and the instruction box sit lower by default, so they no longer cover the GeoFS autopilot bar.
+- The HUD and the instruction box can be dragged by their ⠿ handle; double-click the handle to restore the default position.
+
 ## 1.4.0
 - Air traffic control module: controller role with radar, traffic strips and clearances, sent over the GeoFS chat.
 - Pilots receive ATC instructions as Accept/Unable cards, and the autopilot carries them out (line up, takeoff, landing, go-around, hold, heading/altitude/speed vectors).

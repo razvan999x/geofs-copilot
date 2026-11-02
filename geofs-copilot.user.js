@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.4.0
+// @version      1.4.1
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -115,7 +115,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.4.0';
+  const VERSION = '1.4.1';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -1225,12 +1225,12 @@ function gcrMain() {
   .gcr-sys .t{color:#8193ad;font-size:11px}
   .gcr-sys .s{font-size:14px;font-weight:600;margin:3px 0}
   .gcr-on{color:#4cff8f}.gcr-off{color:#ff6b6b}.gcr-tr{color:#ffd54f}
-  #gcr-hud{position:fixed;z-index:99999;left:50%;top:8px;transform:translateX(-50%);display:flex;gap:10px;align-items:stretch;background:rgba(0,10,0,.55);color:#5cff7a;font:600 13px/1.25 ui-monospace,Consolas,monospace;padding:6px 10px;border-radius:8px;border:1px solid rgba(92,255,122,.35);pointer-events:none;text-shadow:0 0 3px #000}
+  #gcr-hud{position:fixed;z-index:99999;left:50%;top:118px;transform:translateX(-50%);display:flex;gap:10px;align-items:stretch;background:rgba(0,10,0,.55);color:#5cff7a;font:600 13px/1.25 ui-monospace,Consolas,monospace;padding:6px 10px;border-radius:8px;border:1px solid rgba(92,255,122,.35);pointer-events:none;text-shadow:0 0 3px #000}
   #gcr-hud .c{display:flex;flex-direction:column;min-width:78px;white-space:nowrap}
   #gcr-hud .k{font-size:10px;color:#9be7a8;opacity:.8}
   #gcr-hud .warn{color:#ff4d4d;font-size:15px}
   #gcr-hud canvas{display:block}
-  #gcr-warn{position:fixed;z-index:99999;left:50%;top:215px;transform:translateX(-50%);color:#fff;background:rgba(200,20,20,.85);font:700 18px system-ui;padding:6px 16px;border-radius:6px;display:none;pointer-events:none;letter-spacing:1px}
+  #gcr-warn{position:fixed;z-index:99999;left:50%;top:330px;transform:translateX(-50%);color:#fff;background:rgba(200,20,20,.85);font:700 18px system-ui;padding:6px 16px;border-radius:6px;display:none;pointer-events:none;letter-spacing:1px}
   #gcr-toast{position:fixed;z-index:100001;left:50%;bottom:90px;transform:translateX(-50%);background:rgba(20,30,48,.95);color:#fff;font:13px system-ui;padding:8px 14px;border-radius:8px;border:1px solid #3d5679;display:none;max-width:70vw;text-align:center}
   #gcr-landing{position:fixed;z-index:100001;left:50%;top:30%;transform:translateX(-50%);background:rgba(14,20,30,.96);color:#fff;font:13px system-ui;padding:14px 18px;border-radius:12px;border:1px solid #8e24aa;display:none;min-width:280px;text-align:center}
   #gcr-landing .score{font-size:40px;font-weight:800;color:#e040fb}
@@ -1238,7 +1238,7 @@ function gcrMain() {
   .gcr-here{background:#101a2a;border:1px solid #26354b;border-radius:8px;padding:6px 8px;margin-bottom:6px}
   .gcr-destcard{background:linear-gradient(135deg,#2a1636,#16233a);border:1px solid #6a2c86;border-radius:9px;padding:8px 10px;margin-top:10px}
   .gcr-btn.big{width:100%;padding:9px;font-size:13px;font-weight:600}
-  #gcr-guide{position:fixed;z-index:99999;left:50%;top:116px;transform:translateX(-50%);background:rgba(10,14,22,.78);color:#fff;font:13px/1.45 system-ui,Segoe UI,sans-serif;padding:7px 14px;border-radius:9px;border:1px solid rgba(224,64,251,.45);display:none;pointer-events:none;text-align:center;max-width:80vw;text-shadow:0 1px 2px #000}
+  #gcr-guide{position:fixed;z-index:99999;left:50%;top:228px;transform:translateX(-50%);background:rgba(10,14,22,.78);color:#fff;font:13px/1.45 system-ui,Segoe UI,sans-serif;padding:7px 14px;border-radius:9px;border:1px solid rgba(224,64,251,.45);display:none;pointer-events:none;text-align:center;max-width:80vw;text-shadow:0 1px 2px #000}
   #gcr-guide .gh{font-size:16px;font-weight:700;color:#ffe082}
   #gcr-guide .gm{color:#d59ce6;font-size:12px}
   #gcr-nd{position:fixed;z-index:99999;left:12px;bottom:12px;background:rgba(5,8,13,.92);border:1px solid #2b3a52;border-radius:10px;padding:6px;color:#e8eef7;font:11px system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.5)}
@@ -1256,7 +1256,7 @@ function gcrMain() {
   .gcr-atclog{max-height:180px;overflow:auto;border:1px solid #26354b;border-radius:6px;padding:4px 6px;background:#0b111c}
   .gcr-atcmsg{padding:2px 0;border-bottom:1px solid #16202f}
   .gcr-atcmsg.out b{color:#90caf9}.gcr-atcmsg.in b{color:#ffd54f}.gcr-atcmsg.sys b{color:#d59ce6}
-  #gcr-atccard{position:fixed;z-index:100003;left:50%;top:230px;transform:translateX(-50%);background:rgba(20,30,48,.97);border:2px solid #ffd54f;border-radius:12px;padding:10px 16px;color:#fff;font:13px system-ui,sans-serif;text-align:center;display:none;box-shadow:0 8px 30px rgba(0,0,0,.5);min-width:280px}
+  #gcr-atccard{position:fixed;z-index:100003;left:50%;top:340px;transform:translateX(-50%);background:rgba(20,30,48,.97);border:2px solid #ffd54f;border-radius:12px;padding:10px 16px;color:#fff;font:13px system-ui,sans-serif;text-align:center;display:none;box-shadow:0 8px 30px rgba(0,0,0,.5);min-width:280px}
   #gcr-atccard .big{font-size:17px;font-weight:700;color:#ffe082;margin:4px 0}
   #gcr-atcwin{position:fixed;z-index:100000;left:80px;top:90px;background:rgba(5,10,8,.96);border:1px solid #2e5a3c;border-radius:10px;padding:6px;color:#e8eef7;font:12px system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.55)}
   #gcr-atcwin canvas{border-radius:8px;cursor:crosshair}
@@ -1267,6 +1267,9 @@ function gcrMain() {
   .gcr-strip.req{border-left-color:#ff8a80;background:#2a1414}
   .gcr-strip.sel{outline:1px solid #ffd54f}
   .gcr-atccmd{margin-top:6px;border-top:1px solid #1d3326;padding-top:4px}
+  .gcr-grip{pointer-events:auto;cursor:move;user-select:none;color:#9be7a8;opacity:.75;font-size:14px;padding:0 3px;align-self:center}
+  .gcr-grip:hover{opacity:1}
+  #gcr-guide .gcr-grip{position:absolute;left:4px;top:4px;color:#d59ce6;font-size:13px}
   .gcr-kbd{display:inline-block;background:#0c1320;border:1px solid #33465f;border-radius:4px;padding:0 5px;font-family:monospace;color:#fff}
   `;
 
@@ -1739,6 +1742,25 @@ function gcrMain() {
   }
 
   /* ---------------- HUD ---------------- */
+  /** Face un element fix mutabil prin tragere de `handle`; poziția se salvează în settings[key]. */
+  function makeDraggable(box, handle, key) {
+    let drag = null;
+    const place = (x, y) => {
+      const W = window.innerWidth, H = window.innerHeight;
+      box.style.left = clamp(x, 0, Math.max(0, W - box.offsetWidth)) + 'px';
+      box.style.top = clamp(y, 0, Math.max(0, H - 30)) + 'px';
+      box.style.transform = 'none'; box.style.right = 'auto'; box.style.bottom = 'auto';
+    };
+    handle.addEventListener('mousedown', (e) => { const r = box.getBoundingClientRect(); drag = { dx: e.clientX - r.left, dy: e.clientY - r.top }; e.preventDefault(); e.stopPropagation(); });
+    handle.addEventListener('pointerdown', (e) => e.stopPropagation());
+    window.addEventListener('mousemove', (e) => { if (drag) place(e.clientX - drag.dx, e.clientY - drag.dy); });
+    window.addEventListener('mouseup', () => { if (!drag) return; drag = null; settings[key] = [parseInt(box.style.left), parseInt(box.style.top)]; saveSettings(); });
+    handle.addEventListener('dblclick', () => { // dublu-click: înapoi la poziția implicită
+      box.style.left = ''; box.style.top = ''; box.style.transform = ''; delete settings[key]; saveSettings();
+    });
+    if (settings[key]) setTimeout(() => place(settings[key][0], settings[key][1]), 0);
+  }
+
   function buildHud() {
     const hud = el('div', { id: 'gcr-hud' });
     const cols = {};
@@ -1747,7 +1769,10 @@ function gcrMain() {
     col('g', 'G / AoA'); col('apr', L('APROPIERE', 'APPROACH'));
     const cv = el('canvas', { width: 92, height: 92 });
     hud.append(cv);
+    const grip = el('span', { class: 'gcr-grip', title: L('Trage ca să muți HUD-ul (dublu-click = poziția implicită)', 'Drag to move the HUD (double-click = default position)') }, '⠿');
+    hud.prepend(grip);
     document.body.append(hud);
+    makeDraggable(hud, grip, 'hudPos');
     ui.hud = hud; ui.hudCols = cols; ui.hudCanvas = cv;
     hud.style.display = settings.hudVisible ? '' : 'none';
   }
@@ -1892,7 +1917,11 @@ function gcrMain() {
     ui.nd = box; ui.ndCanvas = cv; ui.ndHead = head;
     if (settings.ndPos) setTimeout(() => moveTo(settings.ndPos[0], settings.ndPos[1]), 0);
     const guide = el('div', { id: 'gcr-guide' });
-    document.body.append(guide); ui.guide = guide;
+    guide._grip = el('span', { class: 'gcr-grip', title: L('Trage ca să muți instrucțiunile (dublu-click = poziția implicită)', 'Drag to move the instructions (double-click = default position)') }, '⠿');
+    const guideBody = el('div', { style: 'padding-left:10px' });
+    guide.append(guide._grip, guideBody);
+    document.body.append(guide); ui.guide = guide; ui.guideBody = guideBody;
+    makeDraggable(guide, guide._grip, 'guidePos');
     toggleNd(settings.ndVisible);
   }
   function toggleNd(show) {
@@ -1906,7 +1935,7 @@ function gcrMain() {
     if (!lines.length) { g.style.display = 'none'; return; }
     g.style.display = 'block';
     const html = lines.map(([t, c]) => `<div class="${c === 'h' ? 'gh' : c === 'm' ? 'gm' : ''}">${t}</div>`).join('');
-    if (g._h !== html) { g.innerHTML = html; g._h = html; }
+    if (g._h !== html) { ui.guideBody.innerHTML = html; g._h = html; }
   }
 
   function drawNd() {
