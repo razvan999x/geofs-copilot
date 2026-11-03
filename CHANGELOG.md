@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.5.0
+- Multiplayer traffic is drawn on the moving map, with relative altitude.
+- Other GeoFS Copilot users are recognised (a small version field in the position update, or their ATC messages) and marked with a gold ★ on the map and the ATC radar.
+- The panel header shows how many Copilot users are online (worldwide when the GeoFS player list provides it, otherwise nearby).
+- The signal can be switched off (ATC tab). It turns itself off if the GeoFS server rejects it.
+
 ## 1.4.1
 - The HUD and the instruction box sit lower by default, so they no longer cover the GeoFS autopilot bar.
 - The HUD and the instruction box can be dragged by their ⠿ handle; double-click the handle to restore the default position.

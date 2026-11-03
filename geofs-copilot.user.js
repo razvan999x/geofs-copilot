@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.4.1
+// @version      1.5.0
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -100,6 +100,8 @@ function gcrMain() {
     bankMax: 25,
     lang: 'en',           // 'en' sau 'ro'
     atcRole: 'pilot',     // 'pilot' sau 'ctrl'
+    cpBeacon: true,       // îi arăt pe ceilalți utilizatori Copilot că folosesc pluginul
+    ndTraffic: true,      // traficul pe hartă
     atcAuto: true,        // turn virtual când nu e controlor om
     atcStation: '',
     atcRwy: '',
@@ -115,7 +117,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.4.1';
+  const VERSION = '1.5.0';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -1270,6 +1272,7 @@ function gcrMain() {
   .gcr-grip{pointer-events:auto;cursor:move;user-select:none;color:#9be7a8;opacity:.75;font-size:14px;padding:0 3px;align-self:center}
   .gcr-grip:hover{opacity:1}
   #gcr-guide .gcr-grip{position:absolute;left:4px;top:4px;color:#d59ce6;font-size:13px}
+  .gcr-copbadge{background:#3b2a05;color:#ffd54f;border:1px solid #8d6e00;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;cursor:help}
   .gcr-kbd{display:inline-block;background:#0c1320;border:1px solid #33465f;border-radius:4px;padding:0 5px;font-family:monospace;color:#fff}
   `;
 
@@ -1295,6 +1298,7 @@ function gcrMain() {
     bindKeys();
     hookControls();
     hookChat();
+    hookBeacon();
     setInterval(() => {
       if (!geofsReady() || sim.paused()) return;
       try { updateTrack(); guidanceTick(); autoTakeoffTick(); tripTick(); atcTick(); } catch (e) { console.error('[GeoFS Copilot] guidance', e); }
@@ -1306,6 +1310,7 @@ function gcrMain() {
     setInterval(() => { if (geofsReady()) { try { updateHud(); ui.updateLive(); } catch (e) { console.error('[GeoFS Copilot] HUD', e); } } }, 200);
     setInterval(() => { if (geofsReady()) { try { updateGuide(); drawNd(); drawAtcWindow(); } catch (e) { console.error('[GeoFS Copilot] map', e); } } }, 250);
     setInterval(() => { try { if (ui.tab === 'atc' && settings.panelVisible) ui.renderAtc(); } catch (e) { /* */ } }, 2000);
+    setInterval(() => { try { fetchGlobalCopilots(); updateCopBadge(); } catch (e) { /* */ } }, 5000);
     setInterval(() => { if (geofsReady() && DB.loaded && ui.tab === 'nav' && settings.panelVisible) { try { ui.refreshNearestHere(); if (AP.rwy) ui.renderNav(); } catch (e) { /* */ } } }, 15000);
     // Când avionul e schimbat sau zborul resetat, pistele trebuie redesenate
     try { $(document).on('flyto', () => setTimeout(() => { if (AP.rwy) { buildRoute(); drawApproach(); } }, 1500)); } catch (e) { /* */ }
@@ -1317,7 +1322,9 @@ function gcrMain() {
   function buildPanel() {
     const fab = el('button', { id: 'gcr-fab', title: 'Shift+N', onclick: () => togglePanel(true) }, '✈ Copilot');
     const panel = el('div', { id: 'gcr-panel' });
-    const head = el('div', { id: 'gcr-head' }, el('span', {}, '✈'), el('b', {}, 'GeoFS Copilot'),
+    const copBadge = el('span', { class: 'gcr-copbadge', title: '' }, '★ 1');
+    ui.copBadge = copBadge;
+    const head = el('div', { id: 'gcr-head' }, el('span', {}, '✈'), el('b', {}, 'GeoFS Copilot'), copBadge,
       el('button', { title: L('Ascunde (Shift+N)', 'Hide (Shift+N)'), onclick: () => togglePanel(false) }, '–'));
     const tabsBar = el('div', { class: 'gcr-tabs' });
     const body = el('div', { class: 'gcr-body' });
@@ -1724,6 +1731,7 @@ function gcrMain() {
       el('b', { style: 'display:block;margin-top:8px' }, L('Afișare și sunet', 'Display and sound')),
       chk('hudVisible', L('Afișează HUD-ul (Shift+H)', 'Show the HUD (Shift+H)'), () => { ui.hud.style.display = settings.hudVisible ? '' : 'none'; }),
       chk('voice', L('Anunțuri vocale (callouts / avertizări)', 'Voice callouts and warnings')),
+      chk('ndTraffic', L('Arată traficul pe hartă (★ auriu = utilizatori GeoFS Copilot)', 'Show traffic on the map (gold ★ = GeoFS Copilot users)')),
       el('b', { style: 'display:block;margin-top:8px' }, L('Taste rapide', 'Keyboard shortcuts')),
       el('div', { html: [
         ['Shift+N', L('arată/ascunde panoul', 'show/hide the panel')], ['Shift+M', L('arată/ascunde harta', 'show/hide the map')], ['Shift+P', L('zbor complet / oprește / pleacă din escală', 'full flight / stop / leave stopover')], ['Shift+H', L('arată/ascunde HUD-ul', 'show/hide the HUD')], ['Shift+L', L('activează/oprește apropierea', 'start/stop approach')],
@@ -1989,6 +1997,26 @@ function gcrMain() {
       placed.push([px + 6, py, lw]);
       x.fillStyle = isDest ? '#f3b6ff' : 'rgba(150,230,240,.9)'; x.fillText(label, px + 6, py + 3);
     });
+    // traficul din multiplayer: utilizatorii GeoFS Copilot sunt evidențiați cu auriu
+    if (settings.ndTraffic && window.multiplayer) {
+      const myAltFt = sim.altFt();
+      getTraffic().filter((t) => t.age < 20000 && distM(lat, lon, t.lat, t.lon) < range * 1.1).forEach((t) => {
+        const [px, py] = toXY(t.lat, t.lon);
+        const a = t.hdg * D2R - rot;
+        x.save(); x.translate(px, py); x.rotate(a);
+        x.fillStyle = t.cp ? '#ffd54f' : t.ai ? 'rgba(128,203,196,.55)' : 'rgba(220,230,240,.85)';
+        x.beginPath(); x.moveTo(0, t.cp ? -8 : -6); x.lineTo(t.cp ? 5 : 4, t.cp ? 6 : 5); x.lineTo(0, 2.5); x.lineTo(t.cp ? -5 : -4, t.cp ? 6 : 5); x.closePath(); x.fill();
+        x.restore();
+        if (t.cp) { x.strokeStyle = '#ffd54f'; x.lineWidth = 1.2; x.beginPath(); x.arc(px, py, 10, 0, 7); x.stroke(); }
+        if (t.cp || (!t.ai && settings.ndRange <= 40)) {
+          const dAlt = Math.round((t.altM / FT - myAltFt) / 100);
+          x.font = t.cp ? 'bold 10px system-ui' : '9px system-ui';
+          x.fillStyle = t.cp ? '#ffe082' : 'rgba(220,230,240,.8)';
+          x.fillText((t.cp ? '★ ' : '') + t.cs.slice(0, 14), px + 9, py - 3);
+          x.fillText((dAlt >= 0 ? '+' : '') + String(Math.abs(dAlt)).padStart(2, '0') + (dAlt >= 0 ? '' : '↓'), px + 9, py + 8);
+        }
+      });
+    }
     // traseul
     if (AP.rwy && AP.legs.length) {
       const pts = [[lat, lon]].concat(AP.legs.slice(AP.legIdx).filter((l) => !l.end).map((l) => [l.lat, l.lon]));
@@ -2134,6 +2162,7 @@ function gcrMain() {
     const from = d.cs || '?';
     if (!msg || from === myCallsign()) return;
     const p = parseAtc(msg); if (!p) return;
+    markCopilot(from, 'chat');
     if (p.code === 'ATC' && p.arg) { ATC.stations[p.arg.toUpperCase()] = { cs: from, t: Date.now() }; ui.renderAtc && ui.renderAtc(); return; }
     if (p.code === 'ATCOFF' && p.arg) { delete ATC.stations[p.arg.toUpperCase()]; ui.renderAtc && ui.renderAtc(); return; }
     if (!addressedToMe(msg)) return;
@@ -2161,12 +2190,81 @@ function gcrMain() {
   // atenție: în acest fișier `ui` e interfața pluginului; chatul GeoFS e în window.ui
 
   /* ---------------- Trafic (din multiplayer-ul GeoFS) ---------------- */
+  /* ---------------- Recunoașterea altor utilizatori GeoFS Copilot ----------------
+   * Metoda 1: un câmp mic (st.cp = versiunea) adăugat în actualizarea de poziție trimisă oricum de GeoFS.
+   *           Dacă serverul dă erori după ce îl adăugăm, ne oprim singuri (multiplayerul rămâne neatins).
+   * Metoda 2: oricine trimite mesaje ATC prin plugin e marcat. */
+  const COP = { byCs: {}, beaconOff: false, errStreak: 0, okSinceOn: 0 };
+  function hookBeacon() {
+    if (!geofs.ajax || geofs.ajax.__gcr) return;
+    const orig = geofs.ajax.post;
+    geofs.ajax.post = function (url, data, ok, err) {
+      let tagged = false;
+      try {
+        if (settings.cpBeacon && !COP.beaconOff && typeof url === 'string' && url.indexOf('/update') >= 0 && data && data.st && typeof data.st === 'object') {
+          data.st.cp = VERSION; tagged = true;
+        }
+      } catch (e) { /* */ }
+      if (!tagged) return orig.apply(this, arguments);
+      const ok2 = function () { COP.errStreak = 0; COP.okSinceOn++; return ok && ok.apply(this, arguments); };
+      const err2 = function () {
+        COP.errStreak++;
+        if (COP.errStreak >= 3 && COP.okSinceOn < 3) { // serverul nu acceptă câmpul: îl oprim
+          COP.beaconOff = true;
+          console.warn('[GeoFS Copilot] beacon disabled – the multiplayer server rejected the extra field');
+        }
+        return err && err.apply(this, arguments);
+      };
+      return orig.call(this, url, data, ok2, err2);
+    };
+    geofs.ajax.__gcr = true;
+  }
+  function markCopilot(cs, via, ver) { if (!cs || cs === myCallsign()) return; COP.byCs[cs] = { t: Date.now(), via, ver: ver || (COP.byCs[cs] && COP.byCs[cs].ver) || '' }; }
+  function isCopilot(u, cs) {
+    const lu = u && u.lastUpdate;
+    if (lu && lu.st && lu.st.cp) { markCopilot(cs, 'beacon', String(lu.st.cp)); return true; }
+    const k = COP.byCs[cs]; return !!(k && Date.now() - k.t < 45 * 60000);
+  }
+
+  /** Numărul global de utilizatori Copilot, din lista de piloți online a GeoFS (aceeași cerere ca harta GeoFS). */
+  function fetchGlobalCopilots() {
+    if (!geofs.multiplayerHost || !geofs.ajax || !window.multiplayer || !multiplayer.myId) return;
+    if (COP.global && Date.now() - COP.global.t < 120000) return;
+    COP.global = Object.assign(COP.global || {}, { t: Date.now() });
+    try {
+      geofs.ajax.post(geofs.multiplayerHost + '/map', { id: multiplayer.myId, gid: geofs.userRecord.licenseid }, (e) => {
+        const users = (e && e.users) || [];
+        let n = 0, seenField = false;
+        users.forEach((c) => {
+          if (!c || c.id === multiplayer.myId) return;
+          if (c.st) seenField = true;
+          if (c.st && c.st.cp) { n++; markCopilot(c.cs, 'beacon', String(c.st.cp)); }
+        });
+        COP.global = { t: Date.now(), count: n, total: users.length, ok: seenField };
+        updateCopBadge();
+      }, () => {});
+    } catch (e) { /* */ }
+  }
+  function copNearbyCount() { return window.multiplayer ? getTraffic().filter((t) => t.cp && t.age < 30000).length : 0; }
+  function updateCopBadge() {
+    if (!ui.copBadge) return;
+    const me = settings.cpBeacon !== false ? 1 : 0;
+    const near = copNearbyCount();
+    const g = COP.global && COP.global.ok && Date.now() - COP.global.t < 600000 ? COP.global.count : null;
+    const others = g != null ? Math.max(g, near) : Math.max(near, Object.values(COP.byCs).filter((k) => Date.now() - k.t < 45 * 60000).length);
+    ui.copBadge.textContent = '★ ' + (others + me);
+    ui.copBadge.title = (g != null
+      ? L(`Utilizatori GeoFS Copilot online acum: ${others + me} (tu inclus) · în zona ta: ${near}`, `GeoFS Copilot users online now: ${others + me} (including you) · near you: ${near}`)
+      : L(`Utilizatori GeoFS Copilot cunoscuți: ${others + me} (tu inclus) · în zona ta: ${near}. Numărul global apare dacă serverul GeoFS îl transmite.`, `Known GeoFS Copilot users: ${others + me} (including you) · near you: ${near}. The global count appears if the GeoFS server provides it.`));
+  }
+
   function getTraffic() {
     const out = []; const users = (window.multiplayer && multiplayer.users) || {};
     for (const id in users) {
       const u = users[id]; const lu = u && u.lastUpdate; if (!lu || !lu.co) continue;
       out.push({ id, cs: u.callsign || (u.isTraffic ? 'TFC' : '?'), lat: lu.co[0], lon: lu.co[1], altM: lu.co[2], hdg: norm360(lu.co[3] || 0),
-        kias: (lu.st && lu.st.as) || 0, gear: lu.st ? !!lu.st.gr : true, ai: !!u.isTraffic, age: Date.now() - (u.lastHeartbeatTime || 0) });
+        kias: (lu.st && lu.st.as) || 0, gear: lu.st ? !!lu.st.gr : true, ai: !!u.isTraffic, age: Date.now() - (u.lastHeartbeatTime || 0),
+        cp: !u.isTraffic && isCopilot(u, u.callsign) });
     }
     return out;
   }
@@ -2362,7 +2460,22 @@ function gcrMain() {
     const free = el('input', { placeholder: L('Mesaj către controlor…', 'Message to controller…'), style: 'flex:1;min-width:0', maxlength: 50 });
     const sendFree = () => { const st = currentAtcFor(); if (!st || !free.value.trim()) return; atcSend(`@${st.cs} ${free.value.trim()} #MSG`); free.value = ''; };
     free.addEventListener('keydown', (e) => { if (e.key === 'Enter') sendFree(); });
+    const beacon = el('input', { type: 'checkbox' }); beacon.checked = settings.cpBeacon !== false;
+    beacon.addEventListener('change', () => { settings.cpBeacon = beacon.checked; saveSettings(); });
+    const copBox = el('div', { class: 'gcr-muted', style: 'margin:4px 0' });
+    ui.renderCop = () => {
+      const list = window.multiplayer ? getTraffic().filter((t) => t.cp && t.age < 30000) : [];
+      const [la, lo] = sim.lla();
+      copBox.innerHTML = '';
+      copBox.append(el('div', {}, '★ ' + L('Utilizatori GeoFS Copilot în zonă: ', 'GeoFS Copilot users nearby: '), el('b', { style: 'color:#ffd54f' }, String(list.length)),
+        COP.global && COP.global.ok ? el('span', {}, L(' · online în total: ', ' · online worldwide: '), el('b', { style: 'color:#ffd54f' }, String(COP.global.count + (settings.cpBeacon !== false ? 1 : 0)))) : null));
+      list.sort((a, b) => distM(la, lo, a.lat, a.lon) - distM(la, lo, b.lat, b.lon)).slice(0, 8).forEach((t) =>
+        copBox.append(el('div', {}, `★ ${t.cs} · ${Math.round(distM(la, lo, t.lat, t.lon) / NM)} NM · ${Math.round(t.altM / FT)} ft · ${Math.round(t.kias)} kt`)));
+      if (COP.beaconOff) copBox.append(el('div', { style: 'color:#ff8a80' }, L('Serverul GeoFS nu a acceptat semnalul ascuns – recunoașterea merge doar prin mesajele ATC.', 'The GeoFS server rejected the hidden signal – recognition works through ATC messages only.')));
+    };
     pilotBox.append(
+      el('div', { class: 'gcr-row' }, el('label', { style: 'min-width:0' }, beacon, ' ', L('Arată-le celorlalți utilizatori Copilot că folosesc pluginul', 'Show other Copilot users that I use the plugin'))),
+      copBox,
       el('div', { class: 'gcr-row' }, el('label', { style: 'min-width:0' }, auto, ' ', L('Turn virtual automat când nu e controlor om', 'Automatic virtual tower when no human controller'))),
       el('div', { class: 'gcr-row' },
         el('button', { class: 'gcr-btn sm', onclick: () => { const st = currentAtcFor(); const r = runwayUnderAircraft(); if (st) atcSend(`@${st.cs} ready for departure ${r ? r.ident : ''} #RQTO ${r ? r.ident : ''}`); else ui.toast(L('Niciun controlor om la acest aeroport.', 'No human controller at this airport.')); } }, L('Cere decolarea', 'Request takeoff')),
@@ -2398,6 +2511,7 @@ function gcrMain() {
       el('div', { class: 'gcr-muted', style: 'margin-top:6px' }, L('Mesajele merg prin chatul GeoFS (trebuie să fii logat în GeoFS). Shift+Y = accept, Shift+U = refuz.', 'Messages go through the GeoFS chat (you must be signed in to GeoFS). Shift+Y = accept, Shift+U = refuse.')));
     ui.renderAtc = () => {
       const ctrl = settings.atcRole === 'ctrl';
+      try { ui.renderCop(); } catch (e) { /* */ }
       pilotBox.style.display = ctrl ? 'none' : ''; ctrlBox.style.display = ctrl ? '' : 'none';
       if (ctrl) { if (DB.loaded && settings.atcStation && !rwSel.options.length) fillRw(); }
       const me = myCallsign();
@@ -2536,13 +2650,13 @@ function gcrMain() {
     ATCW.blips = [];
     list.forEach((t) => {
       const [px, py] = toXY(t.lat, t.lon); const sel = ATC.sel === t.cs; const req = ATC.requests[t.cs] && Date.now() - ATC.requests[t.cs].t < 300000;
-      const col = sel ? '#ffd54f' : req ? '#ff8a80' : t.ai ? '#80cbc4' : '#5cff8a';
+      const col = sel ? '#ffd54f' : req ? '#ff8a80' : t.cp ? '#ffb300' : t.ai ? '#80cbc4' : '#5cff8a';
       x.strokeStyle = col; x.fillStyle = col; x.lineWidth = 1.5;
       x.strokeRect(px - 3.5, py - 3.5, 7, 7);
       const vlen = clamp(t.kias / 4, 4, 40); x.beginPath(); x.moveTo(px, py); x.lineTo(px + Math.sin(t.hdg * D2R) * vlen, py - Math.cos(t.hdg * D2R) * vlen); x.stroke();
       x.font = sel ? 'bold 11px monospace' : '10px monospace';
       const elevFt = act ? act.elevFt : (a ? a.elevFt : 0);
-      x.fillText(t.cs.slice(0, 12), px + 7, py - 4);
+      x.fillText((t.cp ? '★' : '') + t.cs.slice(0, 12), px + 7, py - 4);
       x.fillText(`${String(Math.max(0, Math.round(t.altM / FT / 100))).padStart(3, '0')} ${Math.round(t.kias)}kt${(t.altM / FT - elevFt) < 80 && t.kias < 50 ? ' GND' : ''}`, px + 7, py + 8);
       ATCW.blips.push({ x: px, y: py, cs: t.cs });
     });
@@ -2558,7 +2672,7 @@ function gcrMain() {
         const stTxt = k && k.onRwy ? L('PE PISTĂ', 'ON RWY') : k && k.onFinal ? L('FINALĂ', 'FINAL') : (t.altM / FT - (act ? act.elevFt : 0)) < 80 && t.kias < 50 ? L('SOL', 'GND') : '';
         const row = el('div', { class: 'gcr-strip' + (ATC.sel === t.cs ? ' sel' : '') + (req ? ' req' : ''), onclick: () => { ATC.sel = t.cs; ATCW.renderCmd(); ATCW.lastStrips = 0; } },
           el('b', {}, t.cs.slice(0, 14)), el('span', {}, `${Math.round(t.altM / FT)}ft ${Math.round(t.kias)}kt ${d.toFixed(1)}NM`),
-          el('span', { class: 'tag' }, (req ? (req.code === 'RQTO' ? L('cere decolare ', 'req TKOF ') : L('cere aterizare ', 'req LAND ')) + req.arg : '') + (stTxt ? ' ' + stTxt : '') + (t.ai ? ' AI' : '')));
+          el('span', { class: 'tag' }, (req ? (req.code === 'RQTO' ? L('cere decolare ', 'req TKOF ') : L('cere aterizare ', 'req LAND ')) + req.arg : '') + (stTxt ? ' ' + stTxt : '') + (t.ai ? ' AI' : '') + (t.cp ? ' ★ Copilot' : '')));
         ATCW.strips.append(row);
       });
     }

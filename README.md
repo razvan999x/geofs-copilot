@@ -19,6 +19,7 @@ Type a city name and the plugin flies the whole trip: automatic takeoff, climb, 
 - **Landing assistant**: voice callouts (1000, 500, 100… ft), GPWS-style warnings (SINK RATE, GLIDESLOPE, GEAR, TERRAIN…) and a **landing score** from 0 to 100.
 - **Extended autopilot**: altitude, heading, speed, vertical speed and max bank, with keyboard shortcuts.
 - **Aircraft systems panel**: engines, gear, flaps, spoilers, brakes, trim, reverse thrust and **individual throttle per engine**.
+- **See other Copilot users.** All multiplayer traffic is drawn on the map, and other GeoFS Copilot users are marked with a gold ★. The panel header shows how many Copilot users are online.
 - **English and Romanian**, switchable in Settings.
 - **Air traffic control (ATC).** A player can act as tower controller for any airport, with a radar, traffic strips and clearances. Pilots using the plugin get every instruction as an *Accept / Unable* card, and the autopilot carries it out. When no human controller is online, a virtual tower clears takeoffs and landings only when the runway and final are free.
 
@@ -129,5 +130,5 @@ Merge și cu Tampermonkey sau lipind codul în Console (F12).
 
 Limba se schimbă în **Settings → Language / Limba**.
 
-**Controlor de trafic (ATC):** în tab-ul **ATC** alegi rolul *Air traffic controller*, scrii aeroportul și apeși **Open tower**. Pe radar vezi tot traficul, selectezi un avion și îi trimiți instrucțiuni (aliniere, decolare, aterizare, ratare, așteptare, cap/altitudine/viteză). Pilotul cu plugin primește un card **Accept / Refuz**, iar la accept autopilotul execută instrucțiunea. Fără controlor om, un turn virtual autorizează decolările și aterizările doar când pista e liberă. Mesajele trec prin chatul GeoFS, deci trebuie să fii logat în GeoFS.
+**Controlor de trafic (ATC):** în tab-ul **ATC** alegi rolul *Air traffic controller*, scrii aeroportul și apeși **Open tower**. Pe hartă vezi tot traficul din jur, iar ceilalți utilizatori ai pluginului sunt marcați cu ★ auriu. În bara de sus a panoului apare câți utilizatori Copilot sunt online. Pe radar vezi tot traficul, selectezi un avion și îi trimiți instrucțiuni (aliniere, decolare, aterizare, ratare, așteptare, cap/altitudine/viteză). Pilotul cu plugin primește un card **Accept / Refuz**, iar la accept autopilotul execută instrucțiunea. Fără controlor om, un turn virtual autorizează decolările și aterizările doar când pista e liberă. Mesajele trec prin chatul GeoFS, deci trebuie să fii logat în GeoFS.
 
