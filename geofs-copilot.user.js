@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.5.1
+// @version      1.5.2
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -100,6 +100,7 @@ function gcrMain() {
     bankMax: 25,
     lang: 'en',           // 'en' sau 'ro'
     atcRole: 'pilot',     // 'pilot' sau 'ctrl'
+    limit250: false,      // regula reală: max. 250 kt sub 10.000 ft
     cpBeacon: true,       // îi arăt pe ceilalți utilizatori Copilot că folosesc pluginul
     ndTraffic: true,      // traficul pe hartă
     atcAuto: true,        // turn virtual când nu e controlor om
@@ -117,7 +118,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.5.1';
+  const VERSION = '1.5.2';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -607,7 +608,7 @@ function gcrMain() {
       ui.toast(L('Avionul ăsta nu are autopilot. Urmează instrucțiunile din HUD și de pe hartă.', 'This aircraft has no autopilot. Follow the instructions on the HUD and the map.'));
     } else {
       AP.active = true; AP.phase = 'NAV'; releaseVS();
-      geofs.autopilot.setSpeed(Math.min(AP.cruiseSpd, sim.altFt() < 10000 ? 250 : 999));
+      geofs.autopilot.setSpeed(settings.limit250 && sim.altFt() < 10000 ? Math.min(AP.cruiseSpd, 250) : AP.cruiseSpd); AP.lastCmdSpd = geofs.autopilot.values.speed; AP.userSpd = null;
       ui.toast(L(`Zbor automat spre ${aptName(AP.rwy.apt)} · croazieră ${AP.cruiseFt} ft / ${AP.cruiseSpd} kt.`, `Automatic flight to ${aptName(AP.rwy.apt)} · cruise ${AP.cruiseFt} ft / ${AP.cruiseSpd} kt.`));
     }
     ui.renderNav();
@@ -635,7 +636,7 @@ function gcrMain() {
       if (settings.autoConfig && controls.gear.target === 0) { controls.setters.setGearUp.set(); say('Gear up'); }
       if (!apOn()) { AP.active = false; AP.phase = 'MAN'; ui.toast(L('Avionul nu are autopilot – urmează instrucțiunile din HUD și de pe hartă.', 'This aircraft has no autopilot – follow the instructions on the HUD and the map.')); ui.renderNav(); return; }
       buildRoute(); drawApproach(); releaseVS();
-      geofs.autopilot.setSpeed(Math.min(AP.cruiseSpd, 250));
+      geofs.autopilot.setSpeed(settings.limit250 ? Math.min(AP.cruiseSpd, 250) : AP.cruiseSpd); AP.lastCmdSpd = geofs.autopilot.values.speed; AP.userSpd = null;
       AP.phase = 'NAV';
       say('Autopilot engaged');
       ui.toast(L(`Autopilot cuplat: urcăm la ${AP.cruiseFt} ft și zburăm spre ${aptName(AP.rwy.apt)}.`, `Autopilot engaged: climbing to ${AP.cruiseFt} ft and flying to ${aptName(AP.rwy.apt)}.`), 7000);
@@ -735,17 +736,26 @@ function gcrMain() {
 
     // ---------- Viteză și configurație ----------
     const vapp = AP.vapp;
+    const cap = (spd) => (settings.limit250 && altFt < 10000 ? Math.min(spd, 250) : spd);
+    const setSpd = (spd) => { ap.setSpeed(spd); AP.lastCmdSpd = spd; };
+    // viteza schimbată de pilot (din panoul GeoFS sau al pluginului) se respectă în croazieră
+    if (AP.lastCmdSpd != null && Math.abs(ap.values.speed - AP.lastCmdSpd) > 1) { AP.userSpd = ap.values.speed; AP.lastCmdSpd = ap.values.speed; }
     const nearApp = st.distBefore < AP.ifD + 3 * NM && st.distBefore > -1 * NM && AP.legIdx >= AP.legs.findIndex((l) => l.name === 'IF');
     if (AP.phase === 'GS' || (onFinal && st.distBefore < AP.fafD)) {
-      if (ap.values.speed > vapp) ap.setSpeed(vapp);
+      AP.userSpd = null;
+      if (ap.values.speed > vapp) setSpd(vapp);
     } else if (nearApp) {
-      if (ap.values.speed > vapp + 30) ap.setSpeed(vapp + 30);
+      AP.userSpd = null;
+      if (ap.values.speed > vapp + 30) setSpd(vapp + 30);
     } else if (AP.full) {
-      const want = altFt < 10000 ? Math.min(AP.cruiseSpd, 250) : AP.cruiseSpd;
-      const slow = pathRemain < 25 * NM ? Math.min(want, isLight() ? want : 210) : want;
-      if (Math.abs(ap.values.speed - slow) > 2) ap.setSpeed(slow);
+      if (AP.userSpd != null) { if (ap.values.speed !== cap(AP.userSpd)) setSpd(cap(AP.userSpd)); }
+      else {
+        const want = cap(AP.cruiseSpd);
+        const slow = pathRemain < 25 * NM ? Math.min(want, isLight() ? want : 210) : want;
+        if (Math.abs(ap.values.speed - slow) > 2) setSpd(slow);
+      }
       if (!AP.flapsUp && v.kias > vapp + 25 && v.haglFeet > 1000) { setFlaps(0); AP.flapsUp = true; }
-    } else if (altFt < 10000 && ap.values.speed > 250) ap.setSpeed(250);
+    } else if (settings.limit250 && altFt < 10000 && ap.values.speed > 250) setSpd(250);
     if (settings.autoConfig) {
       const steps = sim.flapsSteps();
       if (nearApp && st.distBefore > 0 && steps) setFlaps(Math.max(controls.flaps.target, Math.ceil(steps / 3)));
@@ -986,7 +996,7 @@ function gcrMain() {
       if (!apOn()) { AP.active = false; AP.phase = 'MAN'; ui.toast(L('Avionul nu are autopilot – preia comenzile!', 'This aircraft has no autopilot – take the controls!')); return; }
       geofs.autopilot.setCourse(r.hdg, true);
       geofs.autopilot.setAltitude(Math.max(AP.cruiseFt || 0, sim.altFt() + 3000));
-      geofs.autopilot.setSpeed(Math.min(TO.vr + (isLight() ? 20 : 40), 250));
+      geofs.autopilot.setSpeed(Math.min(TO.vr + (isLight() ? 20 : 40), 250)); AP.lastCmdSpd = geofs.autopilot.values.speed;
       setVS(isLight() ? 700 : 2000);
       AP.phase = 'TAKEOFF'; // de aici preia logica existentă: tren sus la 400 ft, apoi navigație
       say('Positive rate');
@@ -1726,6 +1736,7 @@ function gcrMain() {
       num('vapp', 1, 'Vapp', L('kt (0 = automat)', 'kt (0 = auto)'), rebuild),
       num('minimumsFt', 10, L('Minime', 'Minimums'), L('ft (decuplare AP)', 'ft (AP disconnect)')),
       chk('autoConfig', L('Coboară automat trenul și flapsurile', 'Lower gear and flaps automatically')),
+      chk('limit250', L('Limitează viteza la 250 kt sub 10.000 ft (ca în aviația reală)', 'Limit speed to 250 kt below 10,000 ft (like real aviation)')),
       chk('autoland', L('Aterizare automată (flare + frânare) – altfel AP se decuplează la minime', 'Automatic landing (flare + braking) – otherwise the AP disconnects at minimums')),
       chk('drawTunnel', L('Desenează culoarul 3D', 'Draw the 3D approach corridor'), () => (settings.drawTunnel ? drawApproach() : clearEntities())),
       el('b', { style: 'display:block;margin-top:8px' }, L('Afișare și sunet', 'Display and sound')),

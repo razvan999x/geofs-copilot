@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.2
+- The 250 kt limit below 10,000 ft is now optional (Settings) and off by default.
+- A speed you set on the autopilot during cruise is kept until the approach, instead of being overridden.
+
 ## 1.5.1
 - Fix: Copilot users are now identified by their GeoFS player ID. Previously one signed-out user ("Foo") marked every signed-out pilot as a Copilot user and inflated the counter.
 - The header counter uses the worldwide count when it is available.
