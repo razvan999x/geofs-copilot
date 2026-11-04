@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.5.1
+- Fix: Copilot users are now identified by their GeoFS player ID. Previously one signed-out user ("Foo") marked every signed-out pilot as a Copilot user and inflated the counter.
+- The header counter uses the worldwide count when it is available.
+
 ## 1.5.0
 - Multiplayer traffic is drawn on the moving map, with relative altitude.
 - Other GeoFS Copilot users are recognised (a small version field in the position update, or their ATC messages) and marked with a gold ★ on the map and the ATC radar.

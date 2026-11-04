@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.5.0
+// @version      1.5.1
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -117,7 +117,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.5.0';
+  const VERSION = '1.5.1';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -2194,7 +2194,9 @@ function gcrMain() {
    * Metoda 1: un câmp mic (st.cp = versiunea) adăugat în actualizarea de poziție trimisă oricum de GeoFS.
    *           Dacă serverul dă erori după ce îl adăugăm, ne oprim singuri (multiplayerul rămâne neatins).
    * Metoda 2: oricine trimite mesaje ATC prin plugin e marcat. */
-  const COP = { byCs: {}, beaconOff: false, errStreak: 0, okSinceOn: 0 };
+  const COP = { byId: {}, byCs: {}, beaconOff: false, errStreak: 0, okSinceOn: 0 };
+  // numele „Foo” e comun tuturor piloților nelogați – nu identifică pe nimeni
+  const genericCs = (cs) => !cs || /^foo$/i.test(String(cs).trim());
   function hookBeacon() {
     if (!geofs.ajax || geofs.ajax.__gcr) return;
     const orig = geofs.ajax.post;
@@ -2219,11 +2221,20 @@ function gcrMain() {
     };
     geofs.ajax.__gcr = true;
   }
-  function markCopilot(cs, via, ver) { if (!cs || cs === myCallsign()) return; COP.byCs[cs] = { t: Date.now(), via, ver: ver || (COP.byCs[cs] && COP.byCs[cs].ver) || '' }; }
+  /** Ține minte un utilizator Copilot: după ID-ul de jucător GeoFS când îl avem, altfel după indicativ (doar dacă e unic). */
+  function markCopilot(cs, via, ver, id) {
+    const rec = { t: Date.now(), via, ver: ver || '', cs };
+    if (id != null) { COP.byId[id] = rec; return; }
+    if (genericCs(cs) || cs === myCallsign()) return;
+    COP.byCs[cs] = rec;
+  }
   function isCopilot(u, cs) {
     const lu = u && u.lastUpdate;
-    if (lu && lu.st && lu.st.cp) { markCopilot(cs, 'beacon', String(lu.st.cp)); return true; }
-    const k = COP.byCs[cs]; return !!(k && Date.now() - k.t < 45 * 60000);
+    if (lu && lu.st && lu.st.cp) { markCopilot(cs, 'beacon', String(lu.st.cp), u.id); return true; }
+    const k = u && COP.byId[u.id];
+    if (k && Date.now() - k.t < 10 * 60000) return true;
+    if (genericCs(cs)) return false;
+    const c = COP.byCs[cs]; return !!(c && Date.now() - c.t < 45 * 60000);
   }
 
   /** Numărul global de utilizatori Copilot, din lista de piloți online a GeoFS (aceeași cerere ca harta GeoFS). */
@@ -2238,7 +2249,7 @@ function gcrMain() {
         users.forEach((c) => {
           if (!c || c.id === multiplayer.myId) return;
           if (c.st) seenField = true;
-          if (c.st && c.st.cp) { n++; markCopilot(c.cs, 'beacon', String(c.st.cp)); }
+          if (c.st && c.st.cp) { n++; markCopilot(c.cs, 'beacon', String(c.st.cp), c.id); }
         });
         COP.global = { t: Date.now(), count: n, total: users.length, ok: seenField };
         updateCopBadge();
@@ -2251,7 +2262,7 @@ function gcrMain() {
     const me = settings.cpBeacon !== false ? 1 : 0;
     const near = copNearbyCount();
     const g = COP.global && COP.global.ok && Date.now() - COP.global.t < 600000 ? COP.global.count : null;
-    const others = g != null ? Math.max(g, near) : Math.max(near, Object.values(COP.byCs).filter((k) => Date.now() - k.t < 45 * 60000).length);
+    const others = g != null ? g : Math.max(near, Object.values(COP.byId).filter((k) => Date.now() - k.t < 10 * 60000).length);
     ui.copBadge.textContent = '★ ' + (others + me);
     ui.copBadge.title = (g != null
       ? L(`Utilizatori GeoFS Copilot online acum: ${others + me} (tu inclus) · în zona ta: ${near}`, `GeoFS Copilot users online now: ${others + me} (including you) · near you: ${near}`)
