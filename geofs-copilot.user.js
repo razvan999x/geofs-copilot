@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.5.2
+// @version      1.6.0
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -100,6 +100,8 @@ function gcrMain() {
     bankMax: 25,
     lang: 'en',           // 'en' sau 'ro'
     atcRole: 'pilot',     // 'pilot' sau 'ctrl'
+    fuelOn: true,         // combustibil simulat
+    fuelBurnMul: 1,       // multiplicator de consum
     limit250: false,      // regula reală: max. 250 kt sub 10.000 ft
     cpBeacon: true,       // îi arăt pe ceilalți utilizatori Copilot că folosesc pluginul
     ndTraffic: true,      // traficul pe hartă
@@ -118,7 +120,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.5.2';
+  const VERSION = '1.6.0';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -585,6 +587,12 @@ function gcrMain() {
   }
   function engageFull() { // decolare → croazieră → coborâre → apropiere → aterizare
     if (!AP.rwy) { ui.toast(L('Alege mai întâi destinația.', 'Choose a destination first.')); return; }
+    if (MISSION && MISSION.state === 'boarding') { ui.toast(L(`Îmbarcarea mai durează ${Math.ceil((MISSION.boardEnd - Date.now()) / 1000)} s.`, `Boarding takes ${Math.ceil((MISSION.boardEnd - Date.now()) / 1000)} more seconds.`)); return; }
+    if (settings.fuelOn && sim.onGround()) {
+      if (FUEL.kg <= 0) { ui.toast(L('Rezervorul e gol – alimentează din tab-ul Misiuni.', 'The tank is empty – refuel in the Missions tab.')); return; }
+      buildRoute(); const need = fuelNeededKg();
+      if (need && FUEL.kg < need) ui.toast(L(`Atenție: combustibil ${Math.round(FUEL.kg)} kg, necesar ~${need} kg. Alimentează din tab-ul Misiuni!`, `Warning: fuel ${Math.round(FUEL.kg)} kg, needed ~${need} kg. Refuel in the Missions tab!`), 9000);
+    }
     AP.full = true; AP.flapsUp = false; AP.vapp = suggestedVapp();
     buildRoute(); planCruise(); drawApproach();
     if (geofs.autopilot.definition) geofs.autopilot.definition.maxBankAngle = settings.bankMax;
@@ -929,6 +937,7 @@ function gcrMain() {
   }
 
   function autoTakeoffStart() {
+    if (settings.fuelOn && FUEL.kg != null && FUEL.kg <= 0) { ui.toast(L('Fără combustibil nu se poate decola.', 'Cannot take off without fuel.')); return false; }
     const r = runwayUnderAircraft();
     if (!r) return false;
     if (geofs.autopilot.on) geofs.autopilot.turnOff();
@@ -1212,7 +1221,7 @@ function gcrMain() {
   #gcr-head b{flex:1;font-size:13px}
   #gcr-head button{background:none;border:0;color:#9fb3cf;font-size:16px;cursor:pointer}
   .gcr-tabs{display:flex;border-bottom:1px solid #2b3a52}
-  .gcr-tabs button{flex:1;padding:7px 2px;background:none;border:0;color:#9fb3cf;cursor:pointer;font-size:12px;border-bottom:2px solid transparent}
+  .gcr-tabs button{flex:1;padding:7px 1px;background:none;border:0;color:#9fb3cf;cursor:pointer;font-size:11px;border-bottom:2px solid transparent}
   .gcr-tabs button.on{color:#fff;border-bottom-color:#e040fb}
   .gcr-body{padding:10px}
   .gcr-row{display:flex;gap:6px;align-items:center;margin:5px 0;flex-wrap:wrap}
@@ -1283,6 +1292,10 @@ function gcrMain() {
   .gcr-grip:hover{opacity:1}
   #gcr-guide .gcr-grip{position:absolute;left:4px;top:4px;color:#d59ce6;font-size:13px}
   .gcr-copbadge{background:#3b2a05;color:#ffd54f;border:1px solid #8d6e00;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;cursor:help}
+  .gcr-fuel{background:#101a2a;border:1px solid #26354b;border-radius:8px;padding:7px;margin-top:4px}
+  .gcr-bar{position:relative;height:10px;background:#0c1320;border:1px solid #33465f;border-radius:5px;overflow:hidden;margin-bottom:5px}
+  .gcr-bar>div:first-child{height:100%}
+  .gcr-bar .need{position:absolute;top:-2px;bottom:-2px;width:2px;background:#fff}
   .gcr-kbd{display:inline-block;background:#0c1320;border:1px solid #33465f;border-radius:4px;padding:0 5px;font-family:monospace;color:#fff}
   `;
 
@@ -1311,7 +1324,7 @@ function gcrMain() {
     hookBeacon();
     setInterval(() => {
       if (!geofsReady() || sim.paused()) return;
-      try { updateTrack(); guidanceTick(); autoTakeoffTick(); tripTick(); atcTick(); } catch (e) { console.error('[GeoFS Copilot] guidance', e); }
+      try { updateTrack(); guidanceTick(); autoTakeoffTick(); tripTick(); atcTick(); fuelTick(); missionTick(); } catch (e) { console.error('[GeoFS Copilot] guidance', e); }
     }, 100);
     setInterval(() => {
       if (!geofsReady() || sim.paused()) return;
@@ -1319,7 +1332,7 @@ function gcrMain() {
     }, 100);
     setInterval(() => { if (geofsReady()) { try { updateHud(); ui.updateLive(); } catch (e) { console.error('[GeoFS Copilot] HUD', e); } } }, 200);
     setInterval(() => { if (geofsReady()) { try { updateGuide(); drawNd(); drawAtcWindow(); } catch (e) { console.error('[GeoFS Copilot] map', e); } } }, 250);
-    setInterval(() => { try { if (ui.tab === 'atc' && settings.panelVisible) ui.renderAtc(); } catch (e) { /* */ } }, 2000);
+    setInterval(() => { try { if (ui.tab === 'atc' && settings.panelVisible) ui.renderAtc(); if (ui.tab === 'mis' && settings.panelVisible) ui.renderMissions(); } catch (e) { /* */ } }, 2000);
     setInterval(() => { try { fetchGlobalCopilots(); updateCopBadge(); } catch (e) { /* */ } }, 5000);
     setInterval(() => { if (geofsReady() && DB.loaded && ui.tab === 'nav' && settings.panelVisible) { try { ui.refreshNearestHere(); if (AP.rwy) ui.renderNav(); } catch (e) { /* */ } } }, 15000);
     // Când avionul e schimbat sau zborul resetat, pistele trebuie redesenate
@@ -1338,7 +1351,7 @@ function gcrMain() {
       el('button', { title: L('Ascunde (Shift+N)', 'Hide (Shift+N)'), onclick: () => togglePanel(false) }, '–'));
     const tabsBar = el('div', { class: 'gcr-tabs' });
     const body = el('div', { class: 'gcr-body' });
-    const tabs = { nav: L('Navigație', 'Navigation'), ap: 'Autopilot', sys: L('Avion', 'Aircraft'), atc: 'ATC', set: L('Setări', 'Settings') };
+    const tabs = { nav: L('Navigație', 'Nav'), ap: L('Pilot auto', 'Autopilot'), sys: L('Avion', 'Aircraft'), mis: L('Misiuni', 'Missions'), atc: 'ATC', set: L('Setări', 'Settings') };
     const pages = {};
     Object.keys(tabs).forEach((k) => {
       const b = el('button', { onclick: () => showTab(k) }, tabs[k]); b.dataset.k = k; tabsBar.append(b);
@@ -1375,6 +1388,7 @@ function gcrMain() {
     buildNavPage(pages.nav);
     buildApPage(pages.ap);
     buildSysPage(pages.sys);
+    buildMissionsPage(pages.mis);
     buildAtcPage(pages.atc);
     buildSetPage(pages.set);
     showTab('nav');
@@ -1785,7 +1799,7 @@ function gcrMain() {
     const cols = {};
     const col = (k, label) => { const v = el('div', {}, '—'); cols[k] = v; hud.append(el('div', { class: 'c' }, el('span', { class: 'k' }, label), v)); };
     col('ias', 'IAS / GS kt'); col('alt', 'ALT / AGL ft'); col('vs', 'V/S ft/min'); col('hdg', 'HDG / TRK');
-    col('g', 'G / AoA'); col('apr', L('APROPIERE', 'APPROACH'));
+    col('g', 'G / AoA'); col('fuel', L('COMBUSTIBIL', 'FUEL')); col('apr', L('APROPIERE', 'APPROACH'));
     const cv = el('canvas', { width: 92, height: 92 });
     hud.append(cv);
     const grip = el('span', { class: 'gcr-grip', title: L('Trage ca să muți HUD-ul (dublu-click = poziția implicită)', 'Drag to move the HUD (double-click = default position)') }, '⠿');
@@ -1804,6 +1818,11 @@ function gcrMain() {
     c.vs.textContent = (v.verticalSpeed > 0 ? '+' : '') + fmt(v.verticalSpeed);
     c.hdg.textContent = `${pad3(v.heading)} / ${trackDeg == null ? '—' : pad3(trackDeg)}`;
     c.g.textContent = `${fmt(v.loadFactor, 2)} / ${fmt(v.aoa, 1)}°`;
+    if (settings.fuelOn && FUEL.kg != null) {
+      const pct = Math.round((FUEL.pct || 0) * 100);
+      c.fuel.innerHTML = `<span style="color:${pct < 10 ? '#ff5252' : pct < 25 ? '#ffd54f' : 'inherit'}">${Math.round(FUEL.kg)} kg · ${pct}%</span>` +
+        (FUEL.endurMin != null && FUEL.flow > 0 && !sim.onGround() ? `<br><span class="k">${Math.floor(FUEL.endurMin / 60)}h${String(Math.round(FUEL.endurMin % 60)).padStart(2, '0')} ${L('autonomie', 'left')}</span>` : '');
+    } else c.fuel.textContent = '—';
     const st = approachState();
     if (st) {
       const gsKt = v.groundSpeedKnt || 0;
@@ -2699,6 +2718,305 @@ function gcrMain() {
       });
     }
   }
+
+  /* =====================================================================
+   *  COMBUSTIBIL + MISIUNI
+   *  GeoFS nu are combustibil. Capacitatea și consumul se estimează din masa avionului;
+   *  consumul urmează turația fiecărui motor. La 0 kg motoarele se opresc și nu mai pornesc.
+   * ===================================================================== */
+  const FUEL_PRICE = 0.35;         // $/kg (echilibrat cu plata misiunilor)
+  const ECON = Object.assign({ balance: 10000, missions: 0, hours: 0, nm: 0, earned: 0, history: [] }, store.get('geofsCopilotRO.econ', {}));
+  const saveEcon = () => store.set('geofsCopilotRO.econ', ECON);
+  const FUEL = { kg: null, acId: null, flow: 0, lastT: 0, refuel: null, warned: {} };
+  let MISSION = store.get('geofsCopilotRO.mission', null);  // misiunea activă
+  let OFFERS = { apt: null, list: [], t: 0 };
+  const saveMission = () => store.set('geofsCopilotRO.mission', MISSION);
+
+  function acProfile() {
+    const ac = sim.ac(), d = ac.definition || {};
+    const mass = d.mass || 5000;
+    const light = isLight();
+    return {
+      id: ac.id || d.name || 'ac', name: d.name || ac.id || '?',
+      capKg: Math.round(clamp(mass * (light ? 0.14 : 0.28), 40, 160000)),           // capacitatea rezervorului
+      maxFlowKgH: clamp(mass * (light ? 0.14 : 0.28), 40, 160000) / (light ? 3.0 : 3.6), // consum la putere maximă
+      seats: Math.max(1, Math.round(light ? clamp(mass / 350, 1, 9) : clamp(mass / 420, 4, 600))),
+      cargoKg: Math.round(clamp(mass * (light ? 0.15 : 0.22), 50, 140000)),
+      cruiseKt: AP.cruiseSpd || (light ? 120 : 420),
+    };
+  }
+  function fuelStore() { return store.get('geofsCopilotRO.fuel', {}); }
+  function fuelSync() {
+    const p = acProfile();
+    if (FUEL.acId !== p.id) {
+      const all = fuelStore();
+      FUEL.acId = p.id;
+      FUEL.kg = all[p.id] != null ? Math.min(all[p.id], p.capKg) : Math.round(p.capKg * 0.6); // avion nou: 60%
+      FUEL.warned = {};
+    }
+    return p;
+  }
+  function fuelSave() { const all = fuelStore(); all[FUEL.acId] = Math.round(FUEL.kg); store.set('geofsCopilotRO.fuel', all); }
+
+  /** Puterea relativă a motoarelor (0..1), din turația calculată de GeoFS. */
+  function powerFraction() {
+    const ac = sim.ac(), d = ac.definition || {};
+    if (!ac.engine || !ac.engine.on) return 0;
+    const list = engines();
+    if (list.length && d.maxRPM && d.minRPM != null) {
+      let s = 0; list.forEach((e) => { s += clamp((Math.abs(e.rpm || 0) - d.minRPM) / Math.max(1, d.maxRPM - d.minRPM), 0, 1); });
+      return s / list.length;
+    }
+    return clamp(Math.abs(controls.throttle || 0), 0, 1);
+  }
+
+  function fuelTick() {
+    if (!settings.fuelOn) return;
+    const p = fuelSync();
+    const now = performance.now(); const dt = FUEL.lastT ? Math.min(1, (now - FUEL.lastT) / 1000) : 0; FUEL.lastT = now;
+    const ac = sim.ac();
+    // consum: ralanti ~6% + proporțional cu puterea
+    const pf = powerFraction();
+    FUEL.flow = ac.engine && ac.engine.on ? p.maxFlowKgH * (0.06 + 0.94 * pf) * (settings.fuelBurnMul || 1) : 0;
+    FUEL.kg = Math.max(0, FUEL.kg - (FUEL.flow / 3600) * dt);
+    // alimentare la sol
+    if (FUEL.refuel) {
+      if (!sim.onGround() || (sim.v().groundSpeedKnt || 0) > 3) { FUEL.refuel = null; ui.toast(L('Alimentare întreruptă – avionul s-a mișcat.', 'Refuelling stopped – the aircraft moved.')); }
+      else {
+        const rate = Math.max(p.capKg / 75, 2);            // plin în ~75 s
+        const add = Math.min(rate * dt, FUEL.refuel.target - FUEL.kg, ECON.balance / FUEL_PRICE);
+        if (add > 0) { FUEL.kg += add; ECON.balance -= add * FUEL_PRICE; FUEL.refuel.cost += add * FUEL_PRICE; }
+        if (add <= 0.001 || FUEL.kg >= FUEL.refuel.target - 0.5) {
+          ui.toast(L(`Alimentare terminată: ${Math.round(FUEL.kg)} kg · cost $${Math.round(FUEL.refuel.cost)}`, `Refuelling complete: ${Math.round(FUEL.kg)} kg · cost $${Math.round(FUEL.refuel.cost)}`) + (ECON.balance < 1 ? L(' (fonduri epuizate)', ' (out of money)') : ''));
+          FUEL.refuel = null; saveEcon();
+        }
+      }
+    }
+    // fără combustibil: motoarele se opresc și rămân oprite
+    if (FUEL.kg <= 0 && ac.engine && ac.engine.on) {
+      controls.setters.toggleEngines.set();
+      if (!FUEL.warned.empty) { FUEL.warned.empty = true; say('Fuel exhausted, engine failure', 0); ui.toast(L('COMBUSTIBIL EPUIZAT – motoarele s-au oprit! Planează spre cel mai apropiat aeroport.', 'FUEL EXHAUSTED – engines have stopped! Glide to the nearest airport.'), 12000); }
+    }
+    // avertizări
+    const pct = FUEL.kg / p.capKg, endurMin = FUEL.flow > 0 ? (FUEL.kg / FUEL.flow) * 60 : null;
+    if (!sim.onGround() && pct < 0.1 && !FUEL.warned.low) { FUEL.warned.low = true; say('Low fuel', 0); ui.toast(L('COMBUSTIBIL PUȚIN – sub 10%.', 'LOW FUEL – below 10%.'), 8000); }
+    if (pct > 0.15) FUEL.warned.low = false;
+    if (FUEL.kg > 0) FUEL.warned.empty = false;
+    FUEL.pct = pct; FUEL.endurMin = endurMin;
+    if (Math.floor(now / 5000) !== Math.floor((now - dt * 1000) / 5000)) fuelSave();
+    // statistici de zbor
+    if (!sim.onGround() && dt > 0) { ECON.hours += dt / 3600; ECON.nm += ((sim.v().groundSpeedKnt || 0) * dt) / 3600; }
+  }
+  /** Combustibilul necesar pentru traseul planificat (+ 30 min rezervă). */
+  function fuelNeededKg() {
+    const p = acProfile();
+    if (!AP.rwy || !AP.legs.length) return null;
+    const [lat, lon] = sim.lla();
+    const nm = remainingPathM(lat, lon) / NM;
+    const cruiseFlow = p.maxFlowKgH * (0.06 + 0.94 * 0.62) * (settings.fuelBurnMul || 1);
+    const hours = nm / Math.max(80, p.cruiseKt) + 0.15 + 0.5; // urcare/coborâre + rezervă
+    return Math.round(cruiseFlow * hours);
+  }
+  function startRefuel(targetPct) {
+    const p = fuelSync();
+    if (!sim.onGround() || (sim.v().groundSpeedKnt || 0) > 3) { ui.toast(L('Poți alimenta doar la sol, cu avionul oprit.', 'You can refuel only on the ground, with the aircraft stopped.')); return; }
+    const near = DB.loaded ? nearestAirports(...sim.lla().slice(0, 2), 1)[0] : null;
+    if (!near || near.d > 3 * NM) { ui.toast(L('Nu ești pe un aeroport.', 'You are not at an airport.')); return; }
+    if (ECON.balance < 1) { ui.toast(L('Nu ai bani pentru combustibil. Fă o misiune!', 'Not enough money for fuel. Fly a mission!')); return; }
+    FUEL.refuel = { target: Math.min(p.capKg, p.capKg * targetPct), cost: 0 };
+    ui.toast(L('Alimentare în curs…', 'Refuelling…'));
+  }
+
+  /* ---------------- Misiuni ---------------- */
+  const MTYPES = [
+    { k: 'pax', ro: 'Pasageri', en: 'Passengers', icon: '🧑‍🤝‍🧑', rate: 1.0 },
+    { k: 'cargo', ro: 'Marfă', en: 'Cargo', icon: '📦', rate: 0.8 },
+    { k: 'fragile', ro: 'Marfă fragilă', en: 'Fragile cargo', icon: '🍷', rate: 1.3 },
+    { k: 'med', ro: 'Transport medical urgent', en: 'Urgent medical flight', icon: '🚑', rate: 1.6 },
+    { k: 'vip', ro: 'Zbor VIP', en: 'VIP flight', icon: '🎩', rate: 2.0 },
+  ];
+  const mtype = (k) => MTYPES.find((t) => t.k === k) || MTYPES[0];
+
+  function generateOffers() {
+    if (!DB.loaded) return;
+    const [lat, lon] = sim.lla();
+    const here = nearestAirports(lat, lon, 1)[0];
+    if (!here || here.d > 4 * NM) { OFFERS = { apt: null, list: [], t: Date.now() }; return; }
+    const p = fuelSync();
+    const rangeNm = Math.max(40, (p.capKg / (p.maxFlowKgH * (0.06 + 0.94 * 0.62) * (settings.fuelBurnMul || 1)) - 0.65) * p.cruiseKt);
+    const light = isLight();
+    const bands = light ? [[25, 80], [60, 150], [100, Math.min(300, rangeNm)]] : [[60, 200], [180, 500], [450, Math.min(1800, rangeNm)]];
+    const list = [];
+    bands.forEach(([mn, mx]) => {
+      if (mx <= mn) return;
+      suggestDestinations(lat, lon, mn, mx, light ? 2000 : 6000).slice(0, 3).forEach((dd) => {
+        const t = MTYPES[Math.floor(Math.random() * MTYPES.length)];
+        const isPax = t.k === 'pax' || t.k === 'vip' || t.k === 'med';
+        const load = isPax ? Math.max(1, Math.round(p.seats * (t.k === 'vip' ? 0.1 : t.k === 'med' ? 0.05 : 0.5 + Math.random() * 0.5))) : Math.round(p.cargoKg * (0.4 + Math.random() * 0.6));
+        const loadFactor = isPax ? load / p.seats : load / p.cargoKg;
+        const pay = Math.round((300 + dd.d * (light ? 6 : 22) * (0.5 + loadFactor)) * t.rate / 10) * 10;
+        const mins = (dd.d / Math.max(80, p.cruiseKt)) * 60 + 25;
+        list.push({ id: Math.random().toString(36).slice(2, 8), type: t.k, from: here.apt, to: dd.a.apt, nm: Math.round(dd.d), load, isPax, pay,
+          deadlineMin: Math.round(mins * (t.k === 'med' ? 1.25 : 1.6)) });
+      });
+    });
+    OFFERS = { apt: here.apt, list: list.slice(0, 8), t: Date.now() };
+  }
+
+  function acceptMission(o) {
+    if (MISSION && MISSION.state !== 'done') { ui.toast(L('Ai deja o misiune activă.', 'You already have an active mission.')); return; }
+    MISSION = Object.assign({}, o, { state: 'boarding', acceptedAt: Date.now(), boardEnd: Date.now() + (o.isPax ? 30000 : 20000), maxVs: 0, maxG: 1, wasAirborne: false });
+    saveMission();
+    setSingleDestination(o.to);
+    const need = fuelNeededKg();
+    ui.toast(L(`Misiune acceptată: ${mtype(o.type).ro} spre ${aptName(o.to)}. Îmbarcare…`, `Mission accepted: ${mtype(o.type).en} to ${aptName(o.to)}. Boarding…`) +
+      (need && FUEL.kg < need ? L(` Atenție: îți trebuie ~${need} kg combustibil, ai ${Math.round(FUEL.kg)} kg.`, ` Note: you need ~${need} kg of fuel, you have ${Math.round(FUEL.kg)} kg.`) : ''), 9000);
+    ui.renderMissions && ui.renderMissions();
+  }
+  function abandonMission() {
+    if (!MISSION) return;
+    const pen = Math.round(MISSION.pay * 0.2);
+    ECON.balance -= pen; ECON.history.unshift({ t: Date.now(), from: MISSION.from, to: MISSION.to, type: MISSION.type, result: 'abandoned', pay: -pen });
+    ECON.history = ECON.history.slice(0, 25); saveEcon();
+    ui.toast(L(`Misiune anulată. Penalizare: $${pen}`, `Mission cancelled. Penalty: $${pen}`));
+    MISSION = null; saveMission(); ui.renderMissions && ui.renderMissions();
+  }
+
+  function missionTick() {
+    if (!MISSION || !DB.loaded) return;
+    const v = sim.v(), onG = sim.onGround();
+    const [lat, lon] = sim.lla();
+    if (MISSION.state === 'boarding') {
+      if (Date.now() >= MISSION.boardEnd) { MISSION.state = 'ready'; MISSION.readyAt = Date.now(); saveMission(); say('Boarding complete', 0); ui.toast(L('Îmbarcare terminată – poți pleca (Zbor complet / Shift+P).', 'Boarding complete – you can depart (Full flight / Shift+P).')); ui.renderMissions && ui.renderMissions(); }
+      return;
+    }
+    if (MISSION.state === 'ready' && !onG) { MISSION.state = 'flying'; MISSION.departedAt = Date.now(); saveMission(); }
+    if (MISSION.state === 'flying') {
+      if (!onG) {
+        MISSION.wasAirborne = true;
+        MISSION.maxBank = Math.max(MISSION.maxBank || 0, Math.abs(v.aroll || 0));
+        MISSION.maxG = Math.max(MISSION.maxG || 1, v.loadFactor || 1);
+      }
+      // a aterizat și s-a oprit: la destinație sau în altă parte
+      if (onG && MISSION.wasAirborne && (v.groundSpeedKnt || 0) < 5) {
+        const near = nearestAirports(lat, lon, 1)[0];
+        const last = store.get(LS_LANDINGS, [])[0];
+        if (near && near.apt === MISSION.to && near.d < 4 * NM) completeMission(last);
+        else if (near && near.d < 4 * NM) { MISSION.wasAirborne = false; ui.toast(L(`Ai aterizat la ${aptName(near.apt)}, nu la destinație (${aptName(MISSION.to)}). Misiunea continuă.`, `You landed at ${aptName(near.apt)}, not the destination (${aptName(MISSION.to)}). The mission continues.`), 9000); }
+        else failMission(L('aterizare în afara unui aeroport', 'landed away from an airport'));
+      }
+    }
+  }
+  function completeMission(landing) {
+    const m = MISSION; const t = mtype(m.type);
+    const flownMin = (Date.now() - (m.departedAt || m.acceptedAt)) / 60000;
+    let pay = m.pay; const notes = [];
+    const score = landing ? landing.score : 60;
+    const vs = landing ? Math.abs(landing.vs) : 300;
+    if (score >= 85) { pay += Math.round(m.pay * 0.15); notes.push(L('+15% aterizare excelentă', '+15% excellent landing')); }
+    if (vs > 600) { pay -= Math.round(m.pay * (m.type === 'fragile' ? 0.6 : 0.3)); notes.push(m.type === 'fragile' ? L('−60% marfă deteriorată (aterizare dură)', '−60% damaged cargo (hard landing)') : L('−30% aterizare dură', '−30% hard landing')); }
+    if ((m.maxBank || 0) > 45 && (m.isPax)) { pay -= Math.round(m.pay * 0.1); notes.push(L('−10% pasageri speriați (înclinare mare)', '−10% scared passengers (steep bank)')); }
+    if (flownMin > m.deadlineMin) { const late = m.type === 'med' ? 0.5 : 0.2; pay -= Math.round(m.pay * late); notes.push(L(`−${late * 100}% întârziere`, `−${late * 100}% late`)); }
+    else if (m.type === 'med' || m.type === 'vip') { pay += Math.round(m.pay * 0.1); notes.push(L('+10% la timp', '+10% on time')); }
+    pay = Math.max(0, pay);
+    ECON.balance += pay; ECON.earned += pay; ECON.missions++;
+    ECON.history.unshift({ t: Date.now(), from: m.from, to: m.to, type: m.type, result: 'ok', pay, score });
+    ECON.history = ECON.history.slice(0, 25); saveEcon();
+    say('Mission complete', 0);
+    ui.showMissionResult(m, pay, notes, flownMin);
+    MISSION = null; saveMission(); OFFERS.t = 0; ui.renderMissions && ui.renderMissions();
+  }
+  function failMission(why) {
+    const m = MISSION; if (!m) return;
+    ECON.history.unshift({ t: Date.now(), from: m.from, to: m.to, type: m.type, result: 'failed', pay: 0 }); ECON.history = ECON.history.slice(0, 25); saveEcon();
+    ui.toast(L('Misiune eșuată: ', 'Mission failed: ') + why, 10000); say('Mission failed', 0);
+    MISSION = null; saveMission(); ui.renderMissions && ui.renderMissions();
+  }
+
+  /* ---------------- Interfață: tab-ul Misiuni ---------------- */
+  function buildMissionsPage(p) {
+    const top = el('div', { class: 'gcr-here' });
+    const fuelBox = el('div', { class: 'gcr-fuel' });
+    const active = el('div');
+    const offers = el('div', { class: 'gcr-list', style: 'max-height:260px' });
+    const hist = el('div', { class: 'gcr-status' });
+    const fuelOn = el('input', { type: 'checkbox' }); fuelOn.checked = settings.fuelOn !== false;
+    fuelOn.addEventListener('change', () => { settings.fuelOn = fuelOn.checked; saveSettings(); ui.renderMissions(); });
+    const mul = el('select', {}, ...[['0.5', '×0.5'], ['1', L('×1 realist', '×1 realistic')], ['2', '×2'], ['3', '×3']].map(([v, t]) => el('option', { value: v }, t)));
+    mul.value = String(settings.fuelBurnMul || 1);
+    mul.addEventListener('change', () => { settings.fuelBurnMul = +mul.value; saveSettings(); OFFERS.t = 0; });
+    p.append(top, el('b', { style: 'display:block;margin-top:6px' }, L('Combustibil', 'Fuel')), fuelBox,
+      el('div', { class: 'gcr-row' }, el('label', { style: 'min-width:0' }, fuelOn, ' ', L('Simulează combustibilul (motoarele se opresc la 0)', 'Simulate fuel (engines stop at 0)')), el('span', { class: 'gcr-muted' }, L('consum', 'burn')), mul),
+      active,
+      el('div', { class: 'gcr-row', style: 'margin-top:8px;justify-content:space-between' }, el('b', {}, L('Misiuni disponibile aici', 'Missions available here')),
+        el('button', { class: 'gcr-btn sm', onclick: () => { OFFERS.t = 0; generateOffers(); ui.renderMissions(); } }, L('Altele', 'Others'))),
+      offers, el('b', { style: 'display:block;margin-top:8px' }, L('Istoric', 'History')), hist);
+
+    ui.renderFuel = () => {
+      const pr = fuelSync();
+      const pct = Math.round((FUEL.kg / pr.capKg) * 100);
+      const need = fuelNeededKg();
+      const col = pct < 10 ? '#ff5252' : pct < 25 ? '#ffd54f' : '#4cff8f';
+      fuelBox.innerHTML = '';
+      fuelBox.append(...[
+        el('div', { class: 'gcr-bar' }, el('div', { style: `width:${clamp(pct, 0, 100)}%;background:${col}` }), need ? el('div', { class: 'need', style: `left:${clamp((need / pr.capKg) * 100, 0, 100)}%`, title: L('necesar pentru traseu + rezervă', 'needed for the route + reserve') }) : null),
+        el('div', {}, el('b', {}, `${Math.round(FUEL.kg)} / ${pr.capKg} kg (${pct}%)`),
+          el('span', { class: 'gcr-muted' }, ` · ${L('consum', 'flow')} ${Math.round(FUEL.flow)} kg/h${FUEL.endurMin != null && FUEL.flow > 0 ? ` · ${L('autonomie', 'endurance')} ${Math.floor(FUEL.endurMin / 60)}h${String(Math.round(FUEL.endurMin % 60)).padStart(2, '0')}` : ''}`)),
+        need ? el('div', { class: 'gcr-muted', style: FUEL.kg < need ? 'color:#ff8a80' : '' }, L(`Necesar până la ${aptName(AP.rwy.apt)}: ~${need} kg (cu rezervă 30 min)`, `Needed to ${aptName(AP.rwy.apt)}: ~${need} kg (incl. 30 min reserve)`) + (FUEL.kg < need ? L(' – NU AJUNGE!', ' – NOT ENOUGH!') : ' ✓')) : null,
+        el('div', { class: 'gcr-row' },
+          el('button', { class: 'gcr-btn sm', onclick: () => startRefuel(1) }, L('Alimentează plin', 'Fill up')),
+          need ? el('button', { class: 'gcr-btn sm', onclick: () => startRefuel(Math.min(1, (need * 1.1) / pr.capKg)) }, L('Cât trebuie pentru traseu', 'Enough for the route')) : null,
+          el('button', { class: 'gcr-btn sm', onclick: () => startRefuel(Math.min(1, FUEL.kg / pr.capKg + 0.25)) }, '+25%'),
+          el('span', { class: 'gcr-muted' }, `$${FUEL_PRICE}/kg`), FUEL.refuel ? el('span', { style: 'color:#4dd0e1' }, L(' ⛽ alimentare…', ' ⛽ refuelling…')) : null)].filter(Boolean));
+    };
+    ui.renderMissions = () => {
+      top.innerHTML = '';
+      top.append(el('div', {}, '💰 ', el('b', { style: 'font-size:15px;color:#4cff8f' }, '$' + Math.round(ECON.balance).toLocaleString('en-US')),
+        el('span', { class: 'gcr-muted' }, ` · ${ECON.missions} ${L('misiuni', 'missions')} · ${ECON.hours.toFixed(1)} h · ${Math.round(ECON.nm)} NM`)));
+      ui.renderFuel();
+      // misiunea activă
+      active.innerHTML = '';
+      if (MISSION) {
+        const t = mtype(MISSION.type);
+        const st = { boarding: L('îmbarcare…', 'boarding…'), ready: L('gata de plecare', 'ready to depart'), flying: L('în zbor', 'in flight') }[MISSION.state] || MISSION.state;
+        const left = MISSION.departedAt ? MISSION.deadlineMin - (Date.now() - MISSION.departedAt) / 60000 : MISSION.deadlineMin;
+        active.append(el('div', { class: 'gcr-destcard' },
+          el('div', { class: 'gcr-muted', style: 'font-size:11px' }, L('MISIUNE ACTIVĂ', 'ACTIVE MISSION')),
+          el('div', { style: 'font-size:14px;font-weight:700' }, `${t.icon} ${L(t.ro, t.en)}: ${aptName(MISSION.from)} → ${aptName(MISSION.to)}`),
+          el('div', {}, `${MISSION.isPax ? MISSION.load + L(' pasageri', ' passengers') : MISSION.load + ' kg'} · ${MISSION.nm} NM · $${MISSION.pay}`),
+          el('div', { class: 'gcr-muted' }, `${L('Stare', 'Status')}: ${st} · ${L('timp rămas', 'time left')}: ${Math.max(0, Math.round(left))} min`),
+          el('div', { class: 'gcr-row' }, el('button', { class: 'gcr-btn sm warn', onclick: abandonMission }, L('Anulează (penalizare 20%)', 'Cancel (20% penalty)')))));
+      }
+      // oferte
+      if (!OFFERS.t || Date.now() - OFFERS.t > 300000) generateOffers();
+      offers.innerHTML = '';
+      if (!OFFERS.apt) offers.append(el('div', { class: 'gcr-item gcr-muted' }, L('Misiunile apar când ești la sol pe un aeroport.', 'Missions appear when you are on the ground at an airport.')));
+      else if (!OFFERS.list.length) offers.append(el('div', { class: 'gcr-item gcr-muted' }, L('Nicio misiune potrivită pentru avionul ăsta aici.', 'No suitable missions for this aircraft here.')));
+      OFFERS.list.forEach((o) => {
+        const t = mtype(o.type);
+        offers.append(el('div', { class: 'gcr-item' },
+          el('div', { style: 'flex:1;min-width:0' }, el('b', {}, `${t.icon} ${aptName(o.to)}`), el('div', { class: 'gcr-muted', style: 'font-size:11px' },
+            `${L(t.ro, t.en)} · ${o.isPax ? o.load + ' pax' : o.load + ' kg'} · ${o.nm} NM · ${L('termen', 'deadline')} ${o.deadlineMin} min`)),
+          el('div', { style: 'text-align:right' }, el('b', { style: 'color:#4cff8f' }, '$' + o.pay.toLocaleString('en-US')), el('br'),
+            el('button', { class: 'gcr-btn sm ok', onclick: () => acceptMission(o) }, L('Acceptă', 'Accept')))));
+      });
+      hist.innerHTML = ECON.history.length ? ECON.history.slice(0, 8).map((h) => `<div>${mtype(h.type).icon} ${h.from} → ${h.to} · ${h.result === 'ok' ? '✓' : '✕'} <b style="color:${h.pay >= 0 ? '#4cff8f' : '#ff8a80'}">$${h.pay}</b></div>`).join('') : L('Nicio misiune încă.', 'No missions yet.');
+    };
+    ui.renderMissions();
+  }
+  ui.showMissionResult = (m, pay, notes, mins) => {
+    const e = document.getElementById('gcr-landing'); if (!e) return;
+    const t = mtype(m.type);
+    setTimeout(() => { // după cardul de aterizare
+      e.innerHTML = `<div class="gcr-muted">${L('MISIUNE ÎNDEPLINITĂ', 'MISSION COMPLETE')}</div><div style="font-size:18px;font-weight:700;margin:4px 0">${t.icon} ${aptName(m.from)} → ${aptName(m.to)}</div>
+        <div class="score" style="color:#4cff8f">$${pay.toLocaleString('en-US')}</div>
+        <div class="gcr-muted">${L('plată de bază', 'base pay')} $${m.pay} · ${Math.round(mins)} min</div>
+        ${notes.length ? '<div style="margin-top:6px">' + notes.join('<br>') + '</div>' : ''}
+        <div style="margin-top:8px">${L('Sold', 'Balance')}: <b>$${Math.round(ECON.balance).toLocaleString('en-US')}</b></div>
+        <div class="gcr-muted" style="margin-top:8px">${L('(click pentru a închide)', '(click to close)')}</div>`;
+      e.style.display = 'block'; e.onclick = () => { e.style.display = 'none'; };
+    }, 4000);
+  };
 
   /* ---------------- Taste rapide ---------------- */
   function bindKeys() {

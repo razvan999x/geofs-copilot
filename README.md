@@ -19,6 +19,7 @@ Type a city name and the plugin flies the whole trip: automatic takeoff, climb, 
 - **Landing assistant**: voice callouts (1000, 500, 100… ft), GPWS-style warnings (SINK RATE, GLIDESLOPE, GEAR, TERRAIN…) and a **landing score** from 0 to 100.
 - **Extended autopilot**: altitude, heading, speed, vertical speed and max bank, with keyboard shortcuts.
 - **Aircraft systems panel**: engines, gear, flaps, spoilers, brakes, trim, reverse thrust and **individual throttle per engine**.
+- **Missions and fuel.** Accept paid jobs at the airport you are at: passengers, cargo, fragile cargo, urgent medical or VIP flights, each with a deadline. Bonuses for smooth landings and on-time arrival, penalties for hard landings or delays. Fuel is simulated: capacity and burn come from the aircraft's mass and engine power, you refuel on the ground and pay for it from your earnings, and **if the tank runs dry the engines stop in flight**.
 - **See other Copilot users.** All multiplayer traffic is drawn on the map, and other GeoFS Copilot users are marked with a gold ★. The panel header shows how many Copilot users are online.
 - **English and Romanian**, switchable in Settings.
 - **Air traffic control (ATC).** A player can act as tower controller for any airport, with a radar, traffic strips and clearances. Pilots using the plugin get every instruction as an *Accept / Unable* card, and the autopilot carries it out. When no human controller is online, a virtual tower clears takeoffs and landings only when the runway and final are free.
@@ -54,6 +55,15 @@ Open GeoFS and press **F12** → *Console*. Paste the whole content of `geofs-co
 2. Optional: search for more cities and press **+ stopover** to build a multi-stop plan.
 3. Press **✈ Full flight** (or **Shift+P**). If you are not on a runway, the plugin moves you to the start of the best one, since taxiing is not automated.
 4. Sit back. To land yourself, untick *Automatic landing* in Settings. The autopilot then disconnects at 200 ft.
+
+## Missions and fuel
+
+Open the **Missions** tab in the panel.
+
+- **Fuel.** The gauge shows fuel on board, current flow, endurance and the fuel needed for your planned route plus a 30-minute reserve (white mark). Refuel only on the ground, stopped, at an airport: *Fill up*, *Enough for the route* or *+25%*. Fuel costs $0.35/kg. If you run out in flight, the engines stop and will not restart. You can turn fuel simulation off or change the burn rate (×0.5 to ×3).
+- **Missions.** On the ground at an airport you get offers to destinations your aircraft can reach, with cargo or passengers, distance, deadline and pay. Accept one and the destination is set automatically. Wait for boarding, then fly (Full flight works). Land and stop at the destination to get paid.
+- **Pay.** +15% for an excellent landing, +10% for medical/VIP flights on time. −30% for a hard landing (−60% with fragile cargo), −10% if passengers were scared by steep banks, and a deadline penalty when late. Cancelling a mission costs 20% of its pay.
+- Your balance, missions, flight hours and distance are saved in your browser. Everyone starts with $10,000.
 
 ## Air traffic control (ATC)
 
@@ -127,6 +137,8 @@ Merge și cu Tampermonkey sau lipind codul în Console (F12).
 1. **Shift+N** deschide panoul. În *Navigation* scrii orașul și alegi rezultatul.
 2. Cu **+ stopover** adaugi escale.
 3. **✈ Full flight** (Shift+P) pornește zborul.
+
+**Misiuni și combustibil:** în tab-ul **Missions** accepți misiuni plătite (pasageri, marfă, transport medical, VIP), alimentezi la sol și vezi cât combustibil îți trebuie pentru traseu. Dacă rămâi fără combustibil în zbor, motoarele se opresc.
 
 Limba se schimbă în **Settings → Language / Limba**.
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.0
+- Fuel system: capacity and burn estimated from the aircraft's mass and engine power. Refuelling on the ground at airports costs money. The engines stop in flight when the tank is empty. Low-fuel warnings, an endurance display, fuel needed for the route, and a fuel column on the HUD.
+- Missions: passengers, cargo, fragile cargo, urgent medical and VIP flights from your current airport, with deadlines, bonuses and penalties. Balance, flight hours, distance and history are saved.
+- New Missions tab in the panel.
+
 ## 1.5.2
 - The 250 kt limit below 10,000 ft is now optional (Settings) and off by default.
 - A speed you set on the autopilot during cruise is kept until the approach, instead of being overridden.
