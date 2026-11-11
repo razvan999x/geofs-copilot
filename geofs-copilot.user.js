@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.6.0
+// @version      1.6.1
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -120,7 +120,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.6.0';
+  const VERSION = '1.6.1';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -1262,6 +1262,8 @@ function gcrMain() {
   #gcr-guide{position:fixed;z-index:99999;left:50%;top:228px;transform:translateX(-50%);background:rgba(10,14,22,.78);color:#fff;font:13px/1.45 system-ui,Segoe UI,sans-serif;padding:7px 14px;border-radius:9px;border:1px solid rgba(224,64,251,.45);display:none;pointer-events:none;text-align:center;max-width:80vw;text-shadow:0 1px 2px #000}
   #gcr-guide .gh{font-size:16px;font-weight:700;color:#ffe082}
   #gcr-guide .gm{color:#d59ce6;font-size:12px}
+  #gcr-guide .gi{color:#b3e5fc;font-size:12px;border-top:1px solid rgba(255,255,255,.12);margin-top:3px;padding-top:2px}
+  #gcr-guide .gw{color:#ff8a80;font-size:12px;font-weight:700;border-top:1px solid rgba(255,255,255,.12);margin-top:3px;padding-top:2px}
   #gcr-nd{position:fixed;z-index:99999;left:12px;bottom:12px;background:rgba(5,8,13,.92);border:1px solid #2b3a52;border-radius:10px;padding:6px;color:#e8eef7;font:11px system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.5)}
   #gcr-nd canvas{display:block;border-radius:6px}
   .gcr-ndgrip{display:flex;justify-content:space-between;align-items:center;gap:6px;margin:-2px -2px 4px;padding:3px 6px;background:#18243a;border-radius:6px;cursor:move;user-select:none;color:#9fb3cf}
@@ -1854,7 +1856,51 @@ function gcrMain() {
   }
 
   /* ---------------- Instrucțiuni pas cu pas + hartă (ND) ---------------- */
+  /** Rânduri suplimentare în caseta de instrucțiuni: misiunea și combustibilul, în timp real. */
+  function infoLines() {
+    const out = [];
+    const v = sim.v(), gs = v.groundSpeedKnt || 0;
+    const pathNm = AP.guide && AP.guide.pathNm != null ? AP.guide.pathNm : null;
+    const etaMin = pathNm != null && gs > 60 ? (pathNm / gs) * 60 : null;
+    if (MISSION) {
+      const t = mtype(MISSION.type);
+      const load = MISSION.isPax ? `${MISSION.load} pax` : `${MISSION.load.toLocaleString('en-US')} kg`;
+      let timing = '';
+      if (MISSION.state === 'boarding') timing = L(`îmbarcare ${Math.max(0, Math.ceil((MISSION.boardEnd - Date.now()) / 1000))} s`, `boarding ${Math.max(0, Math.ceil((MISSION.boardEnd - Date.now()) / 1000))} s`);
+      else {
+        const left = MISSION.deadlineMin - (Date.now() - (MISSION.departedAt || MISSION.readyAt || MISSION.acceptedAt)) / 60000;
+        timing = left >= 0 ? L(`${Math.round(left)} min rămase`, `${Math.round(left)} min left`) : L(`întârziere ${Math.round(-left)} min`, `late by ${Math.round(-left)} min`);
+        if (etaMin != null && left >= 0) timing += etaMin <= left ? L(' · ✓ la timp', ' · ✓ on time') : L(` · ⚠ ~${Math.round(etaMin - left)} min întârziere`, ` · ⚠ ~${Math.round(etaMin - left)} min late`);
+      }
+      out.push([`${t.icon} ${L(t.ro, t.en)} → ${aptName(MISSION.to)} · ${load} · $${MISSION.pay.toLocaleString('en-US')} · ${timing}`, 'i']);
+    }
+    if (settings.fuelOn && FUEL.kg != null) {
+      const pct = Math.round((FUEL.pct || 0) * 100);
+      let txt = `⛽ ${Math.round(FUEL.kg).toLocaleString('en-US')} kg (${pct}%)`;
+      if (FUEL.flow > 0) txt += ` · ${Math.round(FUEL.flow).toLocaleString('en-US')} kg/h`;
+      if (FUEL.endurMin != null && FUEL.flow > 0 && !sim.onGround()) txt += ` · ${L('autonomie', 'endurance')} ${Math.floor(FUEL.endurMin / 60)}h${String(Math.round(FUEL.endurMin % 60)).padStart(2, '0')}`;
+      let cls = pct < 10 ? 'w' : 'i';
+      if (etaMin != null && FUEL.flow > 0 && AP.rwy) {
+        const arrive = FUEL.kg - (FUEL.flow * etaMin) / 60;
+        const reserve = FUEL.flow * 0.5;
+        txt += ` · ${L('la sosire', 'at arrival')} ~${Math.max(0, Math.round(arrive)).toLocaleString('en-US')} kg`;
+        if (arrive <= 0) { txt += L(' ⚠ NU AJUNGE', ' ⚠ NOT ENOUGH'); cls = 'w'; }
+        else if (arrive < reserve) { txt += L(' ⚠ sub rezerva de 30 min', ' ⚠ below 30-min reserve'); cls = 'w'; }
+        else txt += ' ✓';
+      }
+      out.push([txt, cls]);
+    }
+    return out;
+  }
+
   function guideLines() {
+    const core = guideLinesCore();
+    if (!AP.rwy && !MISSION && sim.onGround()) return core; // parcat fără plan: fără casetă
+    const extra = infoLines();
+    return core.length || extra.length ? core.concat(extra) : core;
+  }
+
+  function guideLinesCore() {
     if (!AP.rwy) return [];
     const g = AP.guide, v = sim.v(), lines = [];
     const dest = aptName(AP.rwy.apt);
@@ -1972,7 +2018,7 @@ function gcrMain() {
     const g = ui.guide;
     if (!lines.length) { g.style.display = 'none'; return; }
     g.style.display = 'block';
-    const html = lines.map(([t, c]) => `<div class="${c === 'h' ? 'gh' : c === 'm' ? 'gm' : ''}">${t}</div>`).join('');
+    const html = lines.map(([t, c]) => `<div class="${c === 'h' ? 'gh' : c === 'm' ? 'gm' : c === 'i' ? 'gi' : c === 'w' ? 'gw' : ''}">${t}</div>`).join('');
     if (g._h !== html) { ui.guideBody.innerHTML = html; g._h = html; }
   }
 
@@ -2940,6 +2986,8 @@ function gcrMain() {
     const active = el('div');
     const offers = el('div', { class: 'gcr-list', style: 'max-height:260px' });
     const hist = el('div', { class: 'gcr-status' });
+    const offersHead = el('div', { class: 'gcr-row', style: 'margin-top:8px;justify-content:space-between' }, el('b', {}, L('Misiuni disponibile aici', 'Missions available here')),
+      el('button', { class: 'gcr-btn sm', onclick: () => { OFFERS.t = 0; generateOffers(); ui.renderMissions(); } }, L('Altele', 'Others')));
     const fuelOn = el('input', { type: 'checkbox' }); fuelOn.checked = settings.fuelOn !== false;
     fuelOn.addEventListener('change', () => { settings.fuelOn = fuelOn.checked; saveSettings(); ui.renderMissions(); });
     const mul = el('select', {}, ...[['0.5', '×0.5'], ['1', L('×1 realist', '×1 realistic')], ['2', '×2'], ['3', '×3']].map(([v, t]) => el('option', { value: v }, t)));
@@ -2948,8 +2996,7 @@ function gcrMain() {
     p.append(top, el('b', { style: 'display:block;margin-top:6px' }, L('Combustibil', 'Fuel')), fuelBox,
       el('div', { class: 'gcr-row' }, el('label', { style: 'min-width:0' }, fuelOn, ' ', L('Simulează combustibilul (motoarele se opresc la 0)', 'Simulate fuel (engines stop at 0)')), el('span', { class: 'gcr-muted' }, L('consum', 'burn')), mul),
       active,
-      el('div', { class: 'gcr-row', style: 'margin-top:8px;justify-content:space-between' }, el('b', {}, L('Misiuni disponibile aici', 'Missions available here')),
-        el('button', { class: 'gcr-btn sm', onclick: () => { OFFERS.t = 0; generateOffers(); ui.renderMissions(); } }, L('Altele', 'Others'))),
+      offersHead,
       offers, el('b', { style: 'display:block;margin-top:8px' }, L('Istoric', 'History')), hist);
 
     ui.renderFuel = () => {
@@ -2987,12 +3034,16 @@ function gcrMain() {
           el('div', { class: 'gcr-muted' }, `${L('Stare', 'Status')}: ${st} · ${L('timp rămas', 'time left')}: ${Math.max(0, Math.round(left))} min`),
           el('div', { class: 'gcr-row' }, el('button', { class: 'gcr-btn sm warn', onclick: abandonMission }, L('Anulează (penalizare 20%)', 'Cancel (20% penalty)')))));
       }
-      // oferte
-      if (!OFFERS.t || Date.now() - OFFERS.t > 300000) generateOffers();
+      // oferte: doar la sol, pe un aeroport, fără misiune activă
       offers.innerHTML = '';
-      if (!OFFERS.apt) offers.append(el('div', { class: 'gcr-item gcr-muted' }, L('Misiunile apar când ești la sol pe un aeroport.', 'Missions appear when you are on the ground at an airport.')));
+      offersHead.style.display = MISSION ? 'none' : '';
+      if (MISSION) { offers.style.display = 'none'; }
+      else if (!sim.onGround()) { offers.style.display = ''; OFFERS = { apt: null, list: [], t: 0 }; offers.append(el('div', { class: 'gcr-item gcr-muted' }, L('Misiunile noi apar după ce aterizezi pe un aeroport.', 'New missions appear once you land at an airport.'))); }
+      else { offers.style.display = ''; if (!OFFERS.t || Date.now() - OFFERS.t > 300000) generateOffers(); }
+      if (MISSION || !sim.onGround()) { /* nimic de listat */ }
+      else if (!OFFERS.apt) offers.append(el('div', { class: 'gcr-item gcr-muted' }, L('Misiunile apar când ești la sol pe un aeroport.', 'Missions appear when you are on the ground at an airport.')));
       else if (!OFFERS.list.length) offers.append(el('div', { class: 'gcr-item gcr-muted' }, L('Nicio misiune potrivită pentru avionul ăsta aici.', 'No suitable missions for this aircraft here.')));
-      OFFERS.list.forEach((o) => {
+      if (!MISSION && sim.onGround()) OFFERS.list.forEach((o) => {
         const t = mtype(o.type);
         offers.append(el('div', { class: 'gcr-item' },
           el('div', { style: 'flex:1;min-width:0' }, el('b', {}, `${t.icon} ${aptName(o.to)}`), el('div', { class: 'gcr-muted', style: 'font-size:11px' },

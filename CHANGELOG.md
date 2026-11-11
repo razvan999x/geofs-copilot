@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.1
+- Live mission and fuel lines in the instruction box: cargo, pay, time left vs. ETA, fuel on board, flow, endurance and estimated fuel at arrival (with warnings).
+- Mission offers only appear on the ground at an airport, with no active mission.
+
 ## 1.6.0
 - Fuel system: capacity and burn estimated from the aircraft's mass and engine power. Refuelling on the ground at airports costs money. The engines stop in flight when the tank is empty. Low-fuel warnings, an endurance display, fuel needed for the route, and a fuel column on the HUD.
 - Missions: passengers, cargo, fragile cargo, urgent medical and VIP flights from your current airport, with deadlines, bonuses and penalties. Balance, flight hours, distance and history are saved.
