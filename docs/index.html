@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GeoFS Copilot – leaderboard, pilots & install</title>
+<meta name="description" content="GeoFS Copilot: a free plugin for the GeoFS flight simulator with automatic takeoff, navigation by city name, missions, fuel, ATC and an online pilot leaderboard.">
+<style>
+  :root{--bg:#070b12;--panel:#0f1724;--panel2:#141f31;--line:#22314a;--text:#e8eef7;--muted:#8a9ab3;--accent:#e040fb;--gold:#ffd54f;--green:#4cff8f;--cyan:#4dd0e1}
+  *{box-sizing:border-box}
+  body{margin:0;background:radial-gradient(1200px 600px at 70% -10%,#1b1035 0%,transparent 60%),radial-gradient(900px 500px at 0% 0%,#0b2236 0%,transparent 55%),var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;min-height:100vh}
+  a{color:var(--cyan);text-decoration:none} a:hover{text-decoration:underline}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 18px}
+  header{display:flex;align-items:center;gap:14px;padding:18px 0}
+  .logo{font-weight:800;font-size:20px;letter-spacing:.2px;color:var(--text)}
+  .logo span{color:var(--accent)}
+  nav{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+  nav a{color:var(--muted);padding:7px 12px;border-radius:8px;font-weight:600;font-size:14px}
+  nav a.on,nav a:hover{color:var(--text);background:var(--panel2);text-decoration:none}
+  .lang{background:none;border:1px solid var(--line);color:var(--muted);border-radius:8px;padding:6px 9px;cursor:pointer;font-weight:700}
+  .hero{display:grid;grid-template-columns:1.2fr 1fr;gap:28px;align-items:center;padding:38px 0 26px}
+  .hero h1{font-size:42px;line-height:1.08;margin:0 0 12px;letter-spacing:-.5px}
+  .hero h1 em{font-style:normal;background:linear-gradient(90deg,var(--accent),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .hero p{color:#b9c6da;font-size:17px;margin:0 0 20px}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:10px;font-weight:700;border:1px solid var(--line);background:var(--panel2);color:var(--text);cursor:pointer}
+  .btn.pri{background:linear-gradient(135deg,#8e24aa,#c51162);border-color:#d05ce3}
+  .btn.drag{cursor:grab;border-style:dashed;border-color:var(--accent)}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px}
+  .stat b{display:block;font-size:26px;letter-spacing:-.5px}
+  .stat span{color:var(--muted);font-size:13px}
+  section{padding:18px 0 30px}
+  h2{font-size:24px;margin:0 0 14px;letter-spacing:-.2px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+  .tabs button{background:var(--panel);border:1px solid var(--line);color:var(--muted);border-radius:20px;padding:6px 13px;font-weight:600;cursor:pointer}
+  .tabs button.on{color:#fff;border-color:var(--accent);background:#2a1236}
+  table{width:100%;border-collapse:collapse}
+  th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap}
+  th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px;background:var(--panel2)}
+  tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:#121c2c}
+  td.num{text-align:right;font-variant-numeric:tabular-nums} th.num{text-align:right}
+  .pos{font-weight:800;color:var(--muted);width:44px}
+  .p1 .pos{color:var(--gold)} .p2 .pos{color:#cfd8dc} .p3 .pos{color:#ffab91}
+  .rank{display:inline-block;font-size:12px;color:#d59ce6;background:#24112f;border:1px solid #4a2161;border-radius:12px;padding:1px 8px;margin-left:6px}
+  .muted{color:var(--muted)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .grid2>div{min-width:0}
+  .feat{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .feat div{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px}
+  .feat b{display:block;margin:6px 0 4px;font-size:16px}
+  .feat p{margin:0;color:#aab7cb;font-size:14px}
+  .steps{counter-reset:s;list-style:none;padding:0;margin:0}
+  .steps li{counter-increment:s;padding:10px 0 10px 44px;position:relative;border-bottom:1px solid var(--line)}
+  .steps li:before{content:counter(s);position:absolute;left:0;top:9px;width:30px;height:30px;border-radius:50%;background:#2a1236;border:1px solid var(--accent);display:grid;place-items:center;font-weight:800}
+  code{background:#0b1220;border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:13px;word-break:break-all}
+  .ach{display:flex;flex-wrap:wrap;gap:6px}
+  .ach span{background:#2a2005;border:1px solid #8d6e00;border-radius:16px;padding:3px 10px;font-size:13px}
+  .empty{padding:26px;text-align:center;color:var(--muted)}
+  .profile-head{display:flex;gap:16px;align-items:center;margin-bottom:14px}
+  .avatar{width:64px;height:64px;border-radius:50%;background:linear-gradient(135deg,#8e24aa,#0277bd);display:grid;place-items:center;font-size:28px}
+  footer{border-top:1px solid var(--line);padding:22px 0 40px;color:var(--muted);font-size:13px}
+  .scroll{overflow-x:auto}
+  @media (max-width:820px){.hero{grid-template-columns:1fr}.hero h1{font-size:32px}.feat,.grid2{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.hide-m{display:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="logo" href="#/">✈ GeoFS <span>Copilot</span></a>
+    <nav id="nav">
+      <a href="#/" data-r="">Home</a>
+      <a href="#/leaderboard" data-r="leaderboard" data-i="nav_lb">Leaderboard</a>
+      <a href="#/flights" data-r="flights" data-i="nav_fl">Flights</a>
+      <a href="#/install" data-r="install" data-i="nav_in">Install</a>
+    </nav>
+    <button class="lang" id="lang">RO</button>
+  </header>
+  <main id="app"></main>
+  <footer>
+    <span data-i="foot">Made by Razvan Cristea · free and open source · not affiliated with GeoFS.</span>
+    · <a href="https://github.com/razvan999x/geofs-copilot" target="_blank" rel="noopener">GitHub</a>
+    · <span data-i="privacy">The leaderboard stores only your GeoFS callsign and flight statistics. You can turn publishing off in the plugin settings.</span>
+  </footer>
+</div>
+<script>
+const API = 'https://hpsvmyidwqgptgiaweuo.supabase.co/rest/v1/rpc/';
+const KEY = 'sb_publishable_NGXvayFPZlpCXkPywDVF9w_D7rUw0Bb';
+const SCRIPT = 'https://cdn.jsdelivr.net/gh/razvan999x/geofs-copilot@main/geofs-copilot.user.js';
+const BOOKMARK = "javascript:(function(){var s=document.createElement('script');s.src='" + SCRIPT + "';document.body.appendChild(s);})();";
+const RANKS = [[0,'Student Pilot','Elev pilot'],[150,'Private Pilot','Pilot privat'],[500,'Commercial Pilot','Pilot comercial'],[1200,'First Officer','Copilot'],[2500,'Captain','Comandant'],[5000,'Senior Captain','Comandant senior'],[10000,'Chief Pilot','Pilot șef']];
+const ACH = {first_flight:['🛫','First flight','Primul zbor'],butter:['🧈','Butter','Butter'],butter5:['🧈','Velvet hands','Mâini de catifea'],smooth10:['🪶','Passengers love you','Pasagerii te iubesc'],precision:['🎯','Precision','Precizie'],explorer10:['🗺️','Explorer','Explorator'],explorer25:['🌍','Globetrotter','Globetrotter'],long_haul:['🌐','Long haul','Lung-curier'],missions10:['💼','Professional','Profesionist'],missions50:['🏢','Airline','Linie aeriană'],rich100k:['💰','Rich','Bogat'],hero:['🦸','Hero','Erou'],deadstick:['🪂','Glider pilot','Planorist'],school:['🎓','Graduate','Absolvent'],captain:['👨‍✈️','Captain','Comandant']};
+const MT = {pax:'🧑‍🤝‍🧑',cargo:'📦',fragile:'🍷',med:'🚑',vip:'🎩'};
+let lang = localStorage.getItem('gcLang') || ((navigator.language||'').startsWith('ro') ? 'ro' : 'en');
+const T = {
+  nav_lb:['Leaderboard','Clasament'], nav_fl:['Flights','Zboruri'], nav_in:['Install','Instalare'],
+  foot:['Made by Razvan Cristea · free and open source · not affiliated with GeoFS.','Creat de Razvan Cristea · gratuit și open source · neafiliat cu GeoFS.'],
+  privacy:['The leaderboard stores only your GeoFS callsign and flight statistics. You can turn publishing off in the plugin settings.','Clasamentul păstrează doar indicativul din GeoFS și statisticile de zbor. Poți opri publicarea din setările pluginului.'],
+  h1:['Your copilot for <em>GeoFS</em>','Copilotul tău pentru <em>GeoFS</em>'],
+  lead:['Pick a city and fly from takeoff to touchdown. Missions, fuel, emergencies, a flight school, air traffic control, and a leaderboard of pilots around the world.','Alegi un oraș și zbori de la decolare la aterizare. Misiuni, combustibil, urgențe, școală de zbor, control de trafic aerian și un clasament al piloților din toată lumea.'],
+  install:['Install – it\'s free','Instalează – e gratuit'], seeLb:['See the leaderboard','Vezi clasamentul'],
+  pilots:['pilots','piloți'], flights:['flights','zboruri'], hours:['flight hours','ore de zbor'], nm:['nautical miles','mile nautice'], missions:['missions','misiuni'], f24:['flights in 24 h','zboruri în 24 h'],
+  topPilots:['Top pilots','Cei mai buni piloți'], bestLand:['Best landings (30 days)','Cele mai bune aterizări (30 de zile)'], recent:['Recent flights','Zboruri recente'],
+  features:['What it does','Ce face'],
+  pilot:['Pilot','Pilot'], rank:['Rank','Rang'], xp:['XP','XP'], earned:['Earned','Câștigat'], butter:['Butter landings','Aterizări butter'], dist:['Distance','Distanță'],
+  route:['Route','Traseu'], aircraft:['Aircraft','Avion'], landing:['Landing','Aterizare'], score:['Score','Notă'], when:['When','Când'],
+  empty:['No pilots yet – be the first to fly!','Încă niciun pilot – fii primul!'], emptyF:['No flights yet.','Încă niciun zbor.'], loading:['Loading…','Se încarcă…'],
+  dragMe:['✈ GeoFS Copilot','✈ GeoFS Copilot'], dragHint:['Drag this button onto your bookmarks bar.','Trage butonul ăsta pe bara de semne de carte.'],
+  achievements:['Achievements','Realizări'], lastFlights:['Latest flights','Ultimele zboruri'], position:['Position','Locul'], bestScore:['Best landing score','Cea mai bună notă'], best:['Smoothest touchdown','Cea mai lină aterizare'],
+};
+const t = (k) => (T[k] ? T[k][lang === 'ro' ? 1 : 0] : k);
+const rankOf = (xp) => { let r = RANKS[0]; RANKS.forEach((x) => { if (xp >= x[0]) r = x; }); return lang === 'ro' ? r[2] : r[1]; };
+const esc = (s) => String(s == null ? '' : s).replace(/[<>&"']/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt = (n, d = 0) => n == null ? '—' : Number(n).toLocaleString(lang === 'ro' ? 'ro-RO' : 'en-US', {maximumFractionDigits: d});
+const ago = (iso) => { const s = (Date.now() - Date.parse(iso)) / 1000; const r = new Intl.RelativeTimeFormat(lang, {numeric:'auto'});
+  if (s < 3600) return r.format(-Math.round(s/60), 'minute'); if (s < 86400) return r.format(-Math.round(s/3600), 'hour'); return r.format(-Math.round(s/86400), 'day'); };
+async function rpc(fn, body) { const r = await fetch(API + fn, {method:'POST', headers:{apikey:KEY,'Content-Type':'application/json'}, body: JSON.stringify(body||{})}); if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); }
+const app = document.getElementById('app');
+
+function i18nStatic() { document.querySelectorAll('[data-i]').forEach((e) => { e.textContent = t(e.dataset.i); }); document.getElementById('lang').textContent = lang === 'ro' ? 'EN' : 'RO'; document.documentElement.lang = lang; }
+document.getElementById('lang').onclick = () => { lang = lang === 'ro' ? 'en' : 'ro'; localStorage.setItem('gcLang', lang); i18nStatic(); route(); };
+
+function pilotTable(rows, sort) {
+  if (!rows.length) return `<div class="empty">${t('empty')}</div>`;
+  return `<div class="scroll"><table><thead><tr><th>#</th><th>${t('pilot')}</th><th class="num">XP</th><th class="num">${t('flights')}</th><th class="num hide-m">${t('hours')}</th><th class="num hide-m">${t('missions')}</th><th class="num">${t('earned')}</th><th class="num hide-m">${t('best')}</th></tr></thead><tbody>` +
+    rows.map((p) => `<tr class="p${p.pos}"><td class="pos">${p.pos}</td><td><a href="#/pilot/${p.id}"><b>${esc(p.callsign)}</b></a><span class="rank">${rankOf(p.xp)}</span></td><td class="num">${fmt(p.xp)}</td><td class="num">${fmt(p.flights)}</td><td class="num hide-m">${fmt(p.hours,1)}</td><td class="num hide-m">${fmt(p.missions)}</td><td class="num">$${fmt(p.earned)}</td><td class="num hide-m">${p.best_landing_fpm != null ? fmt(p.best_landing_fpm) + ' fpm' : '—'}</td></tr>`).join('') + '</tbody></table></div>';
+}
+function flightTable(rows, best) {
+  if (!rows.length) return `<div class="empty">${t('emptyF')}</div>`;
+  return `<div class="scroll"><table><thead><tr><th>${t('pilot')}</th><th>${t('route')}</th><th class="hide-m">${t('aircraft')}</th><th class="num">${t('landing')}</th><th class="num">${t('score')}</th><th class="num hide-m">${t('when')}</th></tr></thead><tbody>` +
+    rows.map((f) => `<tr><td><a href="#/pilot/${f.pilot_id}">${esc(f.callsign)}</a></td><td>${esc(f.dep || '?')} → ${esc(f.arr || '?')} ${f.mission_type ? (MT[f.mission_type] || '') : ''}${f.emergency ? ' ⚠️' : ''} <span class="muted">${fmt(f.dist_nm)} NM</span></td><td class="hide-m muted">${esc(f.aircraft || '')}</td><td class="num">${f.landing_vs != null ? fmt(f.landing_vs) + ' fpm' : '—'}</td><td class="num">${f.landing_score != null ? '<b>' + f.landing_score + '</b>' : '—'}</td><td class="num hide-m muted">${ago(f.created_at)}</td></tr>`).join('') + '</tbody></table></div>';
+}
+
+async function home() {
+  app.innerHTML = `<div class="hero"><div><h1>${t('h1')}</h1><p>${t('lead')}</p>
+    <a class="btn pri" href="#/install">✈ ${t('install')}</a> <a class="btn" href="#/leaderboard">🏆 ${t('seeLb')}</a></div>
+    <div class="stats" id="stats">${[0,1,2,3,4,5].map(() => '<div class="stat"><b>…</b><span>&nbsp;</span></div>').join('')}</div></div>
+    <section><h2>🏆 ${t('topPilots')}</h2><div class="card" id="top"><div class="empty">${t('loading')}</div></div></section>
+    <section class="grid2"><div><h2>🧈 ${t('bestLand')}</h2><div class="card" id="best"><div class="empty">${t('loading')}</div></div></div>
+      <div><h2>🛫 ${t('recent')}</h2><div class="card" id="recent"><div class="empty">${t('loading')}</div></div></div></section>
+    <section><h2>${t('features')}</h2><div class="feat">${features().map((f) => `<div><span style="font-size:24px">${f[0]}</span><b>${f[1]}</b><p>${f[2]}</p></div>`).join('')}</div></section>`;
+  try { const s = await rpc('get_stats'); document.getElementById('stats').innerHTML = [[s.pilots,t('pilots')],[s.flights,t('flights')],[s.hours,t('hours')],[s.nm,t('nm')],[s.missions,t('missions')],[s.flights_24h,t('f24')]].map(([v,l]) => `<div class="stat"><b>${fmt(v)}</b><span>${l}</span></div>`).join(''); } catch (e) { document.getElementById('stats').innerHTML = ''; }
+  rpc('get_leaderboard', {p_sort:'xp', p_limit:10}).then((r) => { document.getElementById('top').innerHTML = pilotTable(r); }).catch(() => {});
+  rpc('get_recent_flights', {p_limit:8, p_best:true}).then((r) => { document.getElementById('best').innerHTML = flightTable(r, true); }).catch(() => {});
+  rpc('get_recent_flights', {p_limit:8, p_best:false}).then((r) => { document.getElementById('recent').innerHTML = flightTable(r); }).catch(() => {});
+}
+function features() {
+  const ro = lang === 'ro';
+  return [
+    ['🛫', ro ? 'Decolare automată' : 'Automatic takeoff', ro ? 'Ține axul pistei, rotește la Vr și predă autopilotului.' : 'Holds the centerline, rotates at Vr and hands over to the autopilot.'],
+    ['🗺️', ro ? 'Destinații după oraș' : 'Destinations by city', ro ? 'Scrii „Paris” – pluginul alege pista după vânt și te duce acolo.' : 'Type “Paris” – the plugin picks the runway for the wind and flies you there.'],
+    ['🛬', ro ? 'Apropiere ILS și aterizare' : 'ILS approach & autoland', ro ? 'Culoar 3D pe cer, ace ILS, aterizare automată și notă de aterizare.' : '3D corridor in the sky, ILS needles, autoland and a landing score.'],
+    ['💼', ro ? 'Misiuni și carieră' : 'Missions & career', ro ? 'Pasageri, marfă, medical, VIP. Urci de la elev pilot la pilot șef.' : 'Passengers, cargo, medical, VIP. Rise from Student Pilot to Chief Pilot.'],
+    ['⛽', ro ? 'Combustibil și urgențe' : 'Fuel & emergencies', ro ? 'Alimentezi, gestionezi consumul, reacționezi la defecțiuni.' : 'Refuel, manage your burn, handle failures in flight.'],
+    ['📡', ro ? 'Control de trafic aerian' : 'Air traffic control', ro ? 'Fii controlor la orice aeroport sau zbori sub turnul virtual.' : 'Control any airport or fly under the virtual tower.'],
+  ];
+}
+async function leaderboard(sort) {
+  sort = sort || 'xp';
+  const opts = [['xp','XP'],['earned',t('earned')],['hours',lang==='ro'?'Ore':'Hours'],['missions',lang==='ro'?'Misiuni':'Missions'],['butter',t('butter')],['nm',t('dist')]];
+  app.innerHTML = `<section><h2>🏆 ${t('nav_lb')}</h2><div class="tabs">${opts.map(([k,l]) => `<button data-s="${k}" class="${k===sort?'on':''}">${l}</button>`).join('')}</div><div class="card" id="lb"><div class="empty">${t('loading')}</div></div></section>`;
+  app.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => { location.hash = '#/leaderboard/' + b.dataset.s; });
+  try { document.getElementById('lb').innerHTML = pilotTable(await rpc('get_leaderboard', {p_sort: sort, p_limit: 100})); } catch (e) { document.getElementById('lb').innerHTML = `<div class="empty">⚠ ${esc(e.message)}</div>`; }
+}
+async function flights() {
+  app.innerHTML = `<section class="grid2"><div><h2>🧈 ${t('bestLand')}</h2><div class="card" id="best"><div class="empty">${t('loading')}</div></div></div>
+    <div><h2>🛫 ${t('recent')}</h2><div class="card" id="recent"><div class="empty">${t('loading')}</div></div></div></section>`;
+  rpc('get_recent_flights', {p_limit:30, p_best:true}).then((r) => { document.getElementById('best').innerHTML = flightTable(r, true); });
+  rpc('get_recent_flights', {p_limit:30, p_best:false}).then((r) => { document.getElementById('recent').innerHTML = flightTable(r); });
+}
+async function pilot(id) {
+  app.innerHTML = `<div class="empty">${t('loading')}</div>`;
+  try {
+    const d = await rpc('get_pilot', {p_id: id}); const p = d.pilot;
+    if (!p) { app.innerHTML = `<div class="empty">Pilot not found.</div>`; return; }
+    const ach = (d.achievements || []).filter((a) => ACH[a.code]);
+    app.innerHTML = `<section><div class="profile-head"><div class="avatar">👨‍✈️</div><div><h2 style="margin:0">${esc(p.callsign)}</h2>
+      <span class="rank" style="margin:0">${rankOf(p.xp)}</span> <span class="muted">· ${t('position')} #${d.rank_pos} · ${esc(p.last_aircraft || '')}</span></div></div>
+      <div class="stats" style="margin-bottom:16px">${[[fmt(p.xp),'XP'],[fmt(p.flights),t('flights')],[fmt(p.hours,1),t('hours')],[fmt(p.missions),t('missions')],['$'+fmt(p.earned),t('earned')],[p.best_landing_fpm!=null?fmt(p.best_landing_fpm)+' fpm':'—',t('best')]].map(([v,l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('')}</div>
+      <h2>🏅 ${t('achievements')}</h2><div class="ach" style="margin-bottom:18px">${ach.length ? ach.map((a) => `<span>${ACH[a.code][0]} ${ACH[a.code][lang==='ro'?2:1]}</span>`).join('') : '<span class="muted" style="background:none;border:0">—</span>'}</div>
+      <h2>🛫 ${t('lastFlights')}</h2><div class="card">${flightTable((d.flights||[]).map((f) => Object.assign({}, f, {callsign: p.callsign, pilot_id: p.id})))}</div></section>`;
+  } catch (e) { app.innerHTML = `<div class="empty">⚠ ${esc(e.message)}</div>`; }
+}
+function install() {
+  const ro = lang === 'ro';
+  app.innerHTML = `<section><h2>✈ ${t('nav_in')}</h2><div class="grid2">
+    <div class="card" style="padding:18px"><h3 style="margin-top:0">${ro ? '1. Semn de carte (recomandat)' : '1. Bookmark (recommended)'}</h3>
+      <p class="muted">${t('dragHint')}</p><p><a class="btn pri drag" id="bm">${t('dragMe')}</a></p>
+      <ol class="steps"><li>${ro ? 'Trage butonul mov pe bara de semne de carte (Ctrl+Shift+B o afișează).' : 'Drag the purple button onto your bookmarks bar (Ctrl+Shift+B shows it).'}</li>
+      <li>${ro ? 'Deschide <a href="https://www.geo-fs.com/geofs.php" target="_blank" rel="noopener">GeoFS</a> și așteaptă să se încarce avionul.' : 'Open <a href="https://www.geo-fs.com/geofs.php" target="_blank" rel="noopener">GeoFS</a> and wait for the aircraft to load.'}</li>
+      <li>${ro ? 'Apasă pe semnul de carte. În dreapta jos apare eticheta „GeoFS Copilot”.' : 'Click the bookmark. A “GeoFS Copilot” label appears at the bottom right.'}</li></ol>
+      <p class="muted" style="font-size:13px">${ro ? 'Dacă nu poți trage butonul, creează manual un semn de carte cu adresa:' : 'If you cannot drag it, create a bookmark manually with this URL:'}<br><code id="bmcode"></code></p></div>
+    <div class="card" style="padding:18px"><h3 style="margin-top:0">${ro ? '2. Tampermonkey (pornire automată)' : '2. Tampermonkey (loads automatically)'}</h3>
+      <ol class="steps"><li>${ro ? 'Instalează extensia <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener">Tampermonkey</a>.' : 'Install the <a href="https://www.tampermonkey.net/" target="_blank" rel="noopener">Tampermonkey</a> extension.'}</li>
+      <li><a href="https://github.com/razvan999x/geofs-copilot/raw/main/geofs-copilot.user.js">${ro ? 'Deschide scriptul' : 'Open the script'}</a> ${ro ? 'și apasă Install.' : 'and press Install.'}</li>
+      <li>${ro ? 'În Chrome 138+: chrome://extensions → Tampermonkey → Detalii → activează „Permite scripturile utilizatorului”.' : 'In Chrome 138+: chrome://extensions → Tampermonkey → Details → enable “Allow User Scripts”.'}</li></ol>
+      <h3>${ro ? 'Primii pași' : 'First steps'}</h3>
+      <ol class="steps"><li>${ro ? '<b>Shift+N</b> deschide panoul.' : '<b>Shift+N</b> opens the panel.'}</li><li>${ro ? 'În <b>Nav</b> scrii un oraș și apeși pe rezultat.' : 'In <b>Nav</b>, type a city and click a result.'}</li><li>${ro ? '<b>✈ Full flight</b> (Shift+P) – decolare, zbor și aterizare.' : '<b>✈ Full flight</b> (Shift+P) – takeoff, flight and landing.'}</li><li>${ro ? 'Tab-ul <b>Training</b> are lecții pentru începători.' : 'The <b>Training</b> tab has lessons for beginners.'}</li></ol></div>
+  </div></section>`;
+  const bm = document.getElementById('bm'); bm.setAttribute('href', BOOKMARK); bm.onclick = (e) => { e.preventDefault(); alert(ro ? 'Trage butonul pe bara de semne de carte, nu da click pe el aici.' : 'Drag the button to your bookmarks bar – don\'t click it here.'); };
+  document.getElementById('bmcode').textContent = BOOKMARK;
+}
+function route() {
+  const parts = location.hash.replace(/^#\/?/, '').split('/');
+  document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.r === (parts[0] === 'pilot' ? 'leaderboard' : parts[0])));
+  window.scrollTo(0, 0);
+  if (parts[0] === 'leaderboard') return leaderboard(parts[1]);
+  if (parts[0] === 'flights') return flights();
+  if (parts[0] === 'install') return install();
+  if (parts[0] === 'pilot' && parts[1]) return pilot(parts[1]);
+  return home();
+}
+window.addEventListener('hashchange', route);
+i18nStatic(); route();
+</script>
+</body>
+</html>

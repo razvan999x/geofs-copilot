@@ -3,7 +3,7 @@
 **A copilot for [GeoFS](https://www.geo-fs.com), the free browser flight simulator.**
 Type a city name and the plugin flies the whole trip: automatic takeoff, climb, cruise, descent, an ILS-style approach and landing. It also handles stopovers.
 
-*Created by **Razvan Cristea**.* · 🇷🇴 [Versiunea în română mai jos](#-în-română)
+*Created by **Razvan Cristea**.* · 🌐 **[Website & leaderboard](https://razvan999x.github.io/geofs-copilot/)** · 🇷🇴 [Versiunea în română mai jos](#-în-română)
 
 ![Interface](docs/screenshot-interface.png)
 
@@ -20,6 +20,11 @@ Type a city name and the plugin flies the whole trip: automatic takeoff, climb, 
 - **Extended autopilot**: altitude, heading, speed, vertical speed and max bank, with keyboard shortcuts.
 - **Aircraft systems panel**: engines, gear, flaps, spoilers, brakes, trim, reverse thrust and **individual throttle per engine**.
 - **Missions and fuel.** Accept paid jobs at the airport you are at: passengers, cargo, fragile cargo, urgent medical or VIP flights, each with a deadline. Bonuses for smooth landings and on-time arrival, penalties for hard landings or delays. Fuel is simulated: capacity and burn come from the aircraft's mass and engine power, you refuel on the ground and pay for it from your earnings, and **if the tank runs dry the engines stop in flight**.
+- **Career.** Earn XP from flights, missions, lessons and achievements. Rise through 7 ranks, from Student Pilot to Chief Pilot. Higher ranks unlock bigger aircraft for missions and pay more. You can also buy a type rating early.
+- **Emergencies.** Random failures, if you turn them on: engine failure, jammed gear, bird strike, fuel leak, a medical emergency on board, autopilot failure. Each comes with a checklist, a divert-to-nearest-airport button and MAYDAY.
+- **Flight school.** Guided lessons: first takeoff, straight & level and turns, approach and landing, engine failure after takeoff, precision landing. Plus 15 achievements.
+- **Logbook.** Every flight is saved with its path. Export it to Google Earth (KML), GPX or CSV.
+- **Online leaderboard.** Your flights are published to the [GeoFS Copilot website](https://razvan999x.github.io/geofs-copilot/), with pilot profiles, best landings and global stats. You can turn this off.
 - **See other Copilot users.** All multiplayer traffic is drawn on the map, and other GeoFS Copilot users are marked with a gold ★. The panel header shows how many Copilot users are online.
 - **English and Romanian**, switchable in Settings.
 - **Air traffic control (ATC).** A player can act as tower controller for any airport, with a radar, traffic strips and clearances. Pilots using the plugin get every instruction as an *Accept / Unable* card, and the autopilot carries it out. When no human controller is online, a virtual tower clears takeoffs and landings only when the runway and final are free.
@@ -64,6 +69,14 @@ Open the **Missions** tab in the panel.
 - **Missions.** On the ground at an airport you get offers to destinations your aircraft can reach, with cargo or passengers, distance, deadline and pay. Accept one and the destination is set automatically. Wait for boarding, then fly (Full flight works). Land and stop at the destination to get paid.
 - **Pay.** +15% for an excellent landing, +10% for medical/VIP flights on time. −30% for a hard landing (−60% with fragile cargo), −10% if passengers were scared by steep banks, and a deadline penalty when late. Cancelling a mission costs 20% of its pay.
 - Your balance, missions, flight hours and distance are saved in your browser. Everyone starts with $10,000.
+
+## Career, school, logbook and online leaderboard
+
+- **Career** tab: your rank and XP, type ratings (which aircraft classes you may fly on missions), achievements and the top 10 online.
+- **Training** tab: five guided lessons. Each one sets you up on the runway or on final, and the steps appear in the instruction box. You can also trigger a failure on purpose to practise.
+- **Logbook** tab: every flight, with distance, time, fuel, landing and pay. Export KML (Google Earth), GPX or CSV.
+- **Website:** https://razvan999x.github.io/geofs-copilot/ has the all-time leaderboard (by XP, earnings, hours, missions, butter landings or distance), the best landings of the last 30 days, recent flights and pilot profiles.
+- **Privacy:** only your GeoFS callsign and your flight statistics are published. Each browser gets a random secret key, so nobody else can post in your name. The server checks every flight for plausibility and computes XP itself. To stop publishing, untick *Publish my flights* in Settings.
 
 ## Air traffic control (ATC)
 
@@ -137,6 +150,8 @@ Merge și cu Tampermonkey sau lipind codul în Console (F12).
 1. **Shift+N** deschide panoul. În *Navigation* scrii orașul și alegi rezultatul.
 2. Cu **+ stopover** adaugi escale.
 3. **✈ Full flight** (Shift+P) pornește zborul.
+
+**Carieră, școală, jurnal și clasament:** câștigi XP și urci în grad (7 ranguri), primești urgențe aleatorii cu liste de verificare, faci lecții ghidate în tab-ul *Training*, iar zborurile se salvează în *Logbook* (export Google Earth). Clasamentul online e pe [site-ul GeoFS Copilot](https://razvan999x.github.io/geofs-copilot/).
 
 **Misiuni și combustibil:** în tab-ul **Missions** accepți misiuni plătite (pasageri, marfă, transport medical, VIP), alimentezi la sol și vezi cât combustibil îți trebuie pentru traseu. Dacă rămâi fără combustibil în zbor, motoarele se opresc.
 

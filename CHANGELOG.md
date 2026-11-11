@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.0
+- Career: XP, 7 ranks, aircraft classes unlocked by rank or by a purchased type rating, and a pay bonus per rank.
+- Random failures and emergencies (engine, gear, bird strike, fuel leak, medical, autopilot) with a checklist card, divert-to-nearest and MAYDAY. Missions still pay when you divert.
+- Flight school: 5 guided lessons and 15 achievements.
+- Logbook with flight paths, exported as KML (Google Earth), GPX or CSV. Your own flight path is drawn on the map.
+- Online leaderboard backed by Supabase. The server validates flights and computes XP.
+- Website (GitHub Pages): leaderboard, pilot profiles, best landings, recent flights, global stats and install page.
+- Panel tabs wrap into two rows. New tabs: Career, Training, Logbook.
+
 ## 1.6.1
 - Live mission and fuel lines in the instruction box: cargo, pay, time left vs. ETA, fuel on board, flow, endurance and estimated fuel at arrival (with warnings).
 - Mission offers only appear on the ground at an airport, with no active mission.

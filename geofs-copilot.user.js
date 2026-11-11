@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.6.1
+// @version      1.7.0
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -101,6 +101,8 @@ function gcrMain() {
     lang: 'en',           // 'en' sau 'ro'
     atcRole: 'pilot',     // 'pilot' sau 'ctrl'
     fuelOn: true,         // combustibil simulat
+    onlineSync: true,     // publică zborurile în clasamentul online
+    failures: 'rare',     // defecțiuni aleatorii: off | rare | normal
     fuelBurnMul: 1,       // multiplicator de consum
     limit250: false,      // regula reală: max. 250 kt sub 10.000 ft
     cpBeacon: true,       // îi arăt pe ceilalți utilizatori Copilot că folosesc pluginul
@@ -120,7 +122,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.6.1';
+  const VERSION = '1.7.0';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -1119,6 +1121,7 @@ function gcrMain() {
     const rec = { date: new Date().toISOString(), apt: r ? r.apt : '?', rwy: r ? r.ident : '?', vs: Math.round(td.vs), g: +td.maxG.toFixed(2), clM: clM == null ? null : +clM.toFixed(1), tdzM: tdzM == null ? null : Math.round(tdzM), alignDeg: alignDeg == null ? null : +alignDeg.toFixed(1), kias: Math.round(td.kias || 0), score, grade };
     const hist = store.get(LS_LANDINGS, []); hist.unshift(rec); store.set(LS_LANDINGS, hist.slice(0, 20));
     ui.showLanding(rec, notes);
+    try { careerOnLanding(rec); } catch (e) { /* */ }
     say(`Landing ${score >= 90 ? 'excellent' : ''}, ${Math.round(vsAbs)} feet per minute`, 0);
   }
 
@@ -1215,13 +1218,13 @@ function gcrMain() {
   }
 
   const CSS = `
-  #gcr-panel{position:fixed;z-index:100000;top:70px;right:12px;width:340px;max-height:calc(100vh - 100px);overflow:auto;background:rgba(14,20,30,.93);color:#e8eef7;font:12px/1.4 system-ui,Segoe UI,Roboto,sans-serif;border:1px solid #2b3a52;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+  #gcr-panel{position:fixed;z-index:100000;top:70px;right:12px;width:360px;max-height:calc(100vh - 100px);overflow:auto;background:rgba(14,20,30,.93);color:#e8eef7;font:12px/1.4 system-ui,Segoe UI,Roboto,sans-serif;border:1px solid #2b3a52;border-radius:10px;box-shadow:0 8px 30px rgba(0,0,0,.45)}
   #gcr-panel *{box-sizing:border-box}
   #gcr-head{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#18243a;border-radius:10px 10px 0 0;cursor:move;user-select:none}
   #gcr-head b{flex:1;font-size:13px}
   #gcr-head button{background:none;border:0;color:#9fb3cf;font-size:16px;cursor:pointer}
-  .gcr-tabs{display:flex;border-bottom:1px solid #2b3a52}
-  .gcr-tabs button{flex:1;padding:7px 1px;background:none;border:0;color:#9fb3cf;cursor:pointer;font-size:11px;border-bottom:2px solid transparent}
+  .gcr-tabs{display:flex;flex-wrap:wrap;border-bottom:1px solid #2b3a52}
+  .gcr-tabs button{flex:1 0 19%;padding:6px 1px;background:none;border:0;color:#9fb3cf;cursor:pointer;font-size:11px;border-bottom:2px solid transparent}
   .gcr-tabs button.on{color:#fff;border-bottom-color:#e040fb}
   .gcr-body{padding:10px}
   .gcr-row{display:flex;gap:6px;align-items:center;margin:5px 0;flex-wrap:wrap}
@@ -1298,6 +1301,13 @@ function gcrMain() {
   .gcr-bar{position:relative;height:10px;background:#0c1320;border:1px solid #33465f;border-radius:5px;overflow:hidden;margin-bottom:5px}
   .gcr-bar>div:first-child{height:100%}
   .gcr-bar .need{position:absolute;top:-2px;bottom:-2px;width:2px;background:#fff}
+  #gcr-emerg{position:fixed;z-index:100004;left:50%;top:300px;transform:translateX(-50%);background:rgba(40,8,8,.96);border:2px solid #ff5252;border-radius:12px;padding:10px 16px;color:#fff;font:13px system-ui,sans-serif;display:none;max-width:560px;box-shadow:0 8px 34px rgba(0,0,0,.6)}
+  #gcr-emerg .title{font-size:18px;font-weight:800;color:#ff8a80;text-align:center;margin-bottom:4px}
+  #gcr-emerg ol{margin:4px 0 8px 18px;padding:0}
+  .gcr-ach{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+  .gcr-ach .a{display:flex;gap:5px;align-items:center;padding:4px 6px;border:1px solid #26354b;border-radius:6px;opacity:.4;font-size:11px;cursor:help}
+  .gcr-ach .a.on{opacity:1;border-color:#8d6e00;background:#2a2005}
+  .gcr-ach .i{font-size:15px}
   .gcr-kbd{display:inline-block;background:#0c1320;border:1px solid #33465f;border-radius:4px;padding:0 5px;font-family:monospace;color:#fff}
   `;
 
@@ -1326,7 +1336,7 @@ function gcrMain() {
     hookBeacon();
     setInterval(() => {
       if (!geofsReady() || sim.paused()) return;
-      try { updateTrack(); guidanceTick(); autoTakeoffTick(); tripTick(); atcTick(); fuelTick(); missionTick(); } catch (e) { console.error('[GeoFS Copilot] guidance', e); }
+      try { updateTrack(); guidanceTick(); autoTakeoffTick(); tripTick(); atcTick(); fuelTick(); missionTick(); flightTick(); emergencyTick(); lessonTick(); } catch (e) { console.error('[GeoFS Copilot] guidance', e); }
     }, 100);
     setInterval(() => {
       if (!geofsReady() || sim.paused()) return;
@@ -1334,8 +1344,8 @@ function gcrMain() {
     }, 100);
     setInterval(() => { if (geofsReady()) { try { updateHud(); ui.updateLive(); } catch (e) { console.error('[GeoFS Copilot] HUD', e); } } }, 200);
     setInterval(() => { if (geofsReady()) { try { updateGuide(); drawNd(); drawAtcWindow(); } catch (e) { console.error('[GeoFS Copilot] map', e); } } }, 250);
-    setInterval(() => { try { if (ui.tab === 'atc' && settings.panelVisible) ui.renderAtc(); if (ui.tab === 'mis' && settings.panelVisible) ui.renderMissions(); } catch (e) { /* */ } }, 2000);
-    setInterval(() => { try { fetchGlobalCopilots(); updateCopBadge(); } catch (e) { /* */ } }, 5000);
+    setInterval(() => { try { if (ui.tab === 'atc' && settings.panelVisible) ui.renderAtc(); if (ui.tab === 'mis' && settings.panelVisible) ui.renderMissions(); if (ui.tab === 'trn' && settings.panelVisible) ui.renderTraining(); } catch (e) { /* */ } }, 2000);
+    setInterval(() => { try { fetchGlobalCopilots(); updateCopBadge(); if (ui.tab === 'car' && settings.panelVisible) ui.renderCareer(); } catch (e) { /* */ } }, 5000);
     setInterval(() => { if (geofsReady() && DB.loaded && ui.tab === 'nav' && settings.panelVisible) { try { ui.refreshNearestHere(); if (AP.rwy) ui.renderNav(); } catch (e) { /* */ } } }, 15000);
     // Când avionul e schimbat sau zborul resetat, pistele trebuie redesenate
     try { $(document).on('flyto', () => setTimeout(() => { if (AP.rwy) { buildRoute(); drawApproach(); } }, 1500)); } catch (e) { /* */ }
@@ -1353,7 +1363,7 @@ function gcrMain() {
       el('button', { title: L('Ascunde (Shift+N)', 'Hide (Shift+N)'), onclick: () => togglePanel(false) }, '–'));
     const tabsBar = el('div', { class: 'gcr-tabs' });
     const body = el('div', { class: 'gcr-body' });
-    const tabs = { nav: L('Navigație', 'Nav'), ap: L('Pilot auto', 'Autopilot'), sys: L('Avion', 'Aircraft'), mis: L('Misiuni', 'Missions'), atc: 'ATC', set: L('Setări', 'Settings') };
+    const tabs = { nav: L('Navigație', 'Nav'), ap: L('Pilot auto', 'Autopilot'), sys: L('Avion', 'Aircraft'), mis: L('Misiuni', 'Missions'), car: L('Carieră', 'Career'), trn: L('Școală', 'Training'), log: L('Jurnal', 'Logbook'), atc: 'ATC', set: L('Setări', 'Settings') };
     const pages = {};
     Object.keys(tabs).forEach((k) => {
       const b = el('button', { onclick: () => showTab(k) }, tabs[k]); b.dataset.k = k; tabsBar.append(b);
@@ -1391,6 +1401,9 @@ function gcrMain() {
     buildApPage(pages.ap);
     buildSysPage(pages.sys);
     buildMissionsPage(pages.mis);
+    buildCareerPage(pages.car);
+    buildTrainingPage(pages.trn);
+    buildLogPage(pages.log);
     buildAtcPage(pages.atc);
     buildSetPage(pages.set);
     showTab('nav');
@@ -1752,6 +1765,10 @@ function gcrMain() {
       num('vapp', 1, 'Vapp', L('kt (0 = automat)', 'kt (0 = auto)'), rebuild),
       num('minimumsFt', 10, L('Minime', 'Minimums'), L('ft (decuplare AP)', 'ft (AP disconnect)')),
       chk('autoConfig', L('Coboară automat trenul și flapsurile', 'Lower gear and flaps automatically')),
+      chk('onlineSync', L('Publică zborurile mele în clasamentul online (indicativ + statistici de zbor)', 'Publish my flights on the online leaderboard (callsign + flight stats)')),
+      (() => { const sel = el('select', {}, ...[['off', L('fără', 'off')], ['rare', L('rare', 'rare')], ['normal', L('normale', 'normal')]].map(([v, t]) => el('option', { value: v }, t)));
+        sel.value = settings.failures || 'rare'; sel.addEventListener('change', () => { settings.failures = sel.value; saveSettings(); });
+        return el('div', { class: 'gcr-row' }, el('label', {}, L('Defecțiuni aleatorii', 'Random failures')), sel); })(),
       chk('limit250', L('Limitează viteza la 250 kt sub 10.000 ft (ca în aviația reală)', 'Limit speed to 250 kt below 10,000 ft (like real aviation)')),
       chk('autoland', L('Aterizare automată (flare + frânare) – altfel AP se decuplează la minime', 'Automatic landing (flare + braking) – otherwise the AP disconnects at minimums')),
       chk('drawTunnel', L('Desenează culoarul 3D', 'Draw the 3D approach corridor'), () => (settings.drawTunnel ? drawApproach() : clearEntities())),
@@ -1894,8 +1911,9 @@ function gcrMain() {
   }
 
   function guideLines() {
-    const core = guideLinesCore();
-    if (!AP.rwy && !MISSION && sim.onGround()) return core; // parcat fără plan: fără casetă
+    const les = lessonLines();
+    const core = les.length ? les.concat(LES.id === 'takeoff' || LES.id === 'handling' || LES.id === 'engine_out' ? [] : guideLinesCore().filter((x) => x[1] !== 'm')) : guideLinesCore();
+    if (!les.length && !AP.rwy && !MISSION && sim.onGround()) return core; // parcat fără plan: fără casetă
     const extra = infoLines();
     return core.length || extra.length ? core.concat(extra) : core;
   }
@@ -2073,6 +2091,11 @@ function gcrMain() {
       placed.push([px + 6, py, lw]);
       x.fillStyle = isDest ? '#f3b6ff' : 'rgba(150,230,240,.9)'; x.fillText(label, px + 6, py + 3);
     });
+    // traseul zburat până acum în zborul curent
+    if (FLT && FLT.track.length > 1) {
+      x.strokeStyle = 'rgba(92,255,122,.45)'; x.lineWidth = 1.5; x.beginPath();
+      FLT.track.concat([[lat, lon]]).forEach((pt, i) => { const [px, py] = toXY(pt[0], pt[1]); i ? x.lineTo(px, py) : x.moveTo(px, py); }); x.stroke();
+    }
     // traficul din multiplayer: utilizatorii GeoFS Copilot sunt evidențiați cu auriu
     if (settings.ndTraffic && window.multiplayer) {
       const myAltFt = sim.altFt();
@@ -2280,7 +2303,7 @@ function gcrMain() {
       let tagged = false;
       try {
         if (settings.cpBeacon && !COP.beaconOff && typeof url === 'string' && url.indexOf('/update') >= 0 && data && data.st && typeof data.st === 'object') {
-          data.st.cp = VERSION; tagged = true;
+          data.st.cp = `${VERSION}|${rankIdx()}|${CAREER.xp}`; tagged = true;
         }
       } catch (e) { /* */ }
       if (!tagged) return orig.apply(this, arguments);
@@ -2351,7 +2374,7 @@ function gcrMain() {
       const u = users[id]; const lu = u && u.lastUpdate; if (!lu || !lu.co) continue;
       out.push({ id, cs: u.callsign || (u.isTraffic ? 'TFC' : '?'), lat: lu.co[0], lon: lu.co[1], altM: lu.co[2], hdg: norm360(lu.co[3] || 0),
         kias: (lu.st && lu.st.as) || 0, gear: lu.st ? !!lu.st.gr : true, ai: !!u.isTraffic, age: Date.now() - (u.lastHeartbeatTime || 0),
-        cp: !u.isTraffic && isCopilot(u, u.callsign) });
+        cp: !u.isTraffic && isCopilot(u, u.callsign), rank: lu.st && typeof lu.st.cp === 'string' && lu.st.cp.split('|')[1] != null ? clamp(+lu.st.cp.split('|')[1] || 0, 0, 6) : null });
     }
     return out;
   }
@@ -2557,7 +2580,7 @@ function gcrMain() {
       copBox.append(el('div', {}, '★ ' + L('Utilizatori GeoFS Copilot în zonă: ', 'GeoFS Copilot users nearby: '), el('b', { style: 'color:#ffd54f' }, String(list.length)),
         COP.global && COP.global.ok ? el('span', {}, L(' · online în total: ', ' · online worldwide: '), el('b', { style: 'color:#ffd54f' }, String(COP.global.count + (settings.cpBeacon !== false ? 1 : 0)))) : null));
       list.sort((a, b) => distM(la, lo, a.lat, a.lon) - distM(la, lo, b.lat, b.lon)).slice(0, 8).forEach((t) =>
-        copBox.append(el('div', {}, `★ ${t.cs} · ${Math.round(distM(la, lo, t.lat, t.lon) / NM)} NM · ${Math.round(t.altM / FT)} ft · ${Math.round(t.kias)} kt`)));
+        copBox.append(el('div', {}, `★ ${t.cs}${t.rank != null ? ' · ' + rankName(t.rank) : ''} · ${Math.round(distM(la, lo, t.lat, t.lon) / NM)} NM · ${Math.round(t.altM / FT)} ft · ${Math.round(t.kias)} kt`)));
       if (COP.beaconOff) copBox.append(el('div', { style: 'color:#ff8a80' }, L('Serverul GeoFS nu a acceptat semnalul ascuns – recunoașterea merge doar prin mesajele ATC.', 'The GeoFS server rejected the hidden signal – recognition works through ATC messages only.')));
     };
     pilotBox.append(
@@ -2900,16 +2923,17 @@ function gcrMain() {
         const isPax = t.k === 'pax' || t.k === 'vip' || t.k === 'med';
         const load = isPax ? Math.max(1, Math.round(p.seats * (t.k === 'vip' ? 0.1 : t.k === 'med' ? 0.05 : 0.5 + Math.random() * 0.5))) : Math.round(p.cargoKg * (0.4 + Math.random() * 0.6));
         const loadFactor = isPax ? load / p.seats : load / p.cargoKg;
-        const pay = Math.round((300 + dd.d * (light ? 6 : 22) * (0.5 + loadFactor)) * t.rate / 10) * 10;
+        const pay = Math.round((300 + dd.d * (light ? 6 : 22) * (0.5 + loadFactor)) * t.rate * payMul() / 10) * 10;
         const mins = (dd.d / Math.max(80, p.cruiseKt)) * 60 + 25;
         list.push({ id: Math.random().toString(36).slice(2, 8), type: t.k, from: here.apt, to: dd.a.apt, nm: Math.round(dd.d), load, isPax, pay,
-          deadlineMin: Math.round(mins * (t.k === 'med' ? 1.25 : 1.6)) });
+          deadlineMin: Math.round(mins * (t.k === 'med' ? 1.25 : 1.6)), locked: !classAllowed(acClass()) });
       });
     });
     OFFERS = { apt: here.apt, list: list.slice(0, 8), t: Date.now() };
   }
 
   function acceptMission(o) {
+    if (!classAllowed(acClass())) { ui.toast(L('Rangul tău nu permite încă acest avion în misiuni. Cumpără licența de tip din tab-ul Carieră sau alege un avion mai mic.', 'Your rank does not allow this aircraft on missions yet. Buy the type rating in the Career tab or pick a smaller aircraft.'), 9000); return; }
     if (MISSION && MISSION.state !== 'done') { ui.toast(L('Ai deja o misiune activă.', 'You already have an active mission.')); return; }
     MISSION = Object.assign({}, o, { state: 'boarding', acceptedAt: Date.now(), boardEnd: Date.now() + (o.isPax ? 30000 : 20000), maxVs: 0, maxG: 1, wasAirborne: false });
     saveMission();
@@ -2947,25 +2971,31 @@ function gcrMain() {
       if (onG && MISSION.wasAirborne && (v.groundSpeedKnt || 0) < 5) {
         const near = nearestAirports(lat, lon, 1)[0];
         const last = store.get(LS_LANDINGS, [])[0];
-        if (near && near.apt === MISSION.to && near.d < 4 * NM) completeMission(last);
+        if (near && (near.apt === MISSION.to || near.apt === MISSION.divertApt) && near.d < 4 * NM) completeMission(last, near.apt !== MISSION.to);
         else if (near && near.d < 4 * NM) { MISSION.wasAirborne = false; ui.toast(L(`Ai aterizat la ${aptName(near.apt)}, nu la destinație (${aptName(MISSION.to)}). Misiunea continuă.`, `You landed at ${aptName(near.apt)}, not the destination (${aptName(MISSION.to)}). The mission continues.`), 9000); }
         else failMission(L('aterizare în afara unui aeroport', 'landed away from an airport'));
       }
     }
   }
-  function completeMission(landing) {
+  function completeMission(landing, diverted) {
     const m = MISSION; const t = mtype(m.type);
     const flownMin = (Date.now() - (m.departedAt || m.acceptedAt)) / 60000;
     let pay = m.pay; const notes = [];
+    if (diverted) {
+      const med = EMERG.active && EMERG.active.type === 'medical' && Date.now() <= EMERG.active.deadline;
+      pay = med ? Math.round(m.pay * 0.7) + 800 : Math.round(m.pay * 0.5);
+      notes.push(med ? L('Deviere medicală reușită: 70% + $800 bonus 🚑', 'Successful medical diversion: 70% + $800 bonus 🚑') : L('Aterizare de urgență la alt aeroport: 50%', 'Emergency landing at another airport: 50%'));
+    }
     const score = landing ? landing.score : 60;
     const vs = landing ? Math.abs(landing.vs) : 300;
     if (score >= 85) { pay += Math.round(m.pay * 0.15); notes.push(L('+15% aterizare excelentă', '+15% excellent landing')); }
     if (vs > 600) { pay -= Math.round(m.pay * (m.type === 'fragile' ? 0.6 : 0.3)); notes.push(m.type === 'fragile' ? L('−60% marfă deteriorată (aterizare dură)', '−60% damaged cargo (hard landing)') : L('−30% aterizare dură', '−30% hard landing')); }
     if ((m.maxBank || 0) > 45 && (m.isPax)) { pay -= Math.round(m.pay * 0.1); notes.push(L('−10% pasageri speriați (înclinare mare)', '−10% scared passengers (steep bank)')); }
-    if (flownMin > m.deadlineMin) { const late = m.type === 'med' ? 0.5 : 0.2; pay -= Math.round(m.pay * late); notes.push(L(`−${late * 100}% întârziere`, `−${late * 100}% late`)); }
+    if (!diverted && flownMin > m.deadlineMin) { const late = m.type === 'med' ? 0.5 : 0.2; pay -= Math.round(m.pay * late); notes.push(L(`−${late * 100}% întârziere`, `−${late * 100}% late`)); }
     else if (m.type === 'med' || m.type === 'vip') { pay += Math.round(m.pay * 0.1); notes.push(L('+10% la timp', '+10% on time')); }
     pay = Math.max(0, pay);
     ECON.balance += pay; ECON.earned += pay; ECON.missions++;
+    try { careerOnMission(pay, m.type, 'ok'); } catch (e) { /* */ }
     ECON.history.unshift({ t: Date.now(), from: m.from, to: m.to, type: m.type, result: 'ok', pay, score });
     ECON.history = ECON.history.slice(0, 25); saveEcon();
     say('Mission complete', 0);
@@ -3049,7 +3079,8 @@ function gcrMain() {
           el('div', { style: 'flex:1;min-width:0' }, el('b', {}, `${t.icon} ${aptName(o.to)}`), el('div', { class: 'gcr-muted', style: 'font-size:11px' },
             `${L(t.ro, t.en)} · ${o.isPax ? o.load + ' pax' : o.load + ' kg'} · ${o.nm} NM · ${L('termen', 'deadline')} ${o.deadlineMin} min`)),
           el('div', { style: 'text-align:right' }, el('b', { style: 'color:#4cff8f' }, '$' + o.pay.toLocaleString('en-US')), el('br'),
-            el('button', { class: 'gcr-btn sm ok', onclick: () => acceptMission(o) }, L('Acceptă', 'Accept')))));
+            classAllowed(acClass()) ? el('button', { class: 'gcr-btn sm ok', onclick: () => acceptMission(o) }, L('Acceptă', 'Accept'))
+              : el('button', { class: 'gcr-btn sm', title: L('Licență necesară', 'Type rating required'), onclick: () => { document.querySelector('#gcr-panel .gcr-tabs button[data-k=car]').click(); } }, '🔒 ' + L('Licență', 'Rating')))));
       });
       hist.innerHTML = ECON.history.length ? ECON.history.slice(0, 8).map((h) => `<div>${mtype(h.type).icon} ${h.from} → ${h.to} · ${h.result === 'ok' ? '✓' : '✕'} <b style="color:${h.pay >= 0 ? '#4cff8f' : '#ff8a80'}">$${h.pay}</b></div>`).join('') : L('Nicio misiune încă.', 'No missions yet.');
     };
@@ -3069,6 +3100,500 @@ function gcrMain() {
     }, 4000);
   };
 
+  /* =====================================================================
+   *  CARIERĂ · JURNAL DE ZBOR · REALIZĂRI · URGENȚE · ȘCOALĂ DE ZBOR · CLASAMENT ONLINE
+   * ===================================================================== */
+  const ONLINE = { url: 'https://hpsvmyidwqgptgiaweuo.supabase.co', key: 'sb_publishable_NGXvayFPZlpCXkPywDVF9w_D7rUw0Bb', site: 'https://razvan999x.github.io/geofs-copilot/' };
+  const RANKS = [
+    { xp: 0, ro: 'Elev pilot', en: 'Student Pilot', cls: 0 },
+    { xp: 150, ro: 'Pilot privat', en: 'Private Pilot', cls: 1 },
+    { xp: 500, ro: 'Pilot comercial', en: 'Commercial Pilot', cls: 2 },
+    { xp: 1200, ro: 'Copilot', en: 'First Officer', cls: 3 },
+    { xp: 2500, ro: 'Comandant', en: 'Captain', cls: 4 },
+    { xp: 5000, ro: 'Comandant senior', en: 'Senior Captain', cls: 5 },
+    { xp: 10000, ro: 'Pilot șef', en: 'Chief Pilot', cls: 5 },
+  ];
+  const CLASSES = [
+    { max: 2500, ro: 'avioane ușoare', en: 'light aircraft', price: 0 },
+    { max: 6000, ro: 'avioane mici', en: 'small aircraft', price: 4000 },
+    { max: 25000, ro: 'avioane regionale', en: 'regional aircraft', price: 12000 },
+    { max: 90000, ro: 'avioane medii (A320/737)', en: 'narrow-body jets (A320/737)', price: 30000 },
+    { max: 250000, ro: 'avioane lung-curier', en: 'wide-body jets', price: 70000 },
+    { max: Infinity, ro: 'avioane grele (747/A380)', en: 'heavy jets (747/A380)', price: 150000 },
+  ];
+  const CAREER = Object.assign({ xp: null, ratings: [], ach: {}, lessons: {}, key: null, pilotId: null, rankPos: null }, store.get('geofsCopilotRO.career', {}));
+  if (CAREER.xp == null) CAREER.xp = (ECON.missions || 0) * 40; // pornire pentru cei care aveau deja misiuni
+  if (!CAREER.key) { const b = new Uint8Array(24); crypto.getRandomValues(b); CAREER.key = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join(''); }
+  const saveCareer = () => store.set('geofsCopilotRO.career', CAREER);
+  saveCareer();
+  function rankIdx(xp) { let i = 0; RANKS.forEach((r, k) => { if ((xp != null ? xp : CAREER.xp) >= r.xp) i = k; }); return i; }
+  const rankName = (i) => L(RANKS[i].ro, RANKS[i].en);
+  function acClass() { const m = (sim.ac().definition && sim.ac().definition.mass) || 5000; return CLASSES.findIndex((c) => m < c.max); }
+  function classAllowed(ci) { return ci <= RANKS[rankIdx()].cls || CAREER.ratings.includes(ci); }
+  function payMul() { return 1 + 0.05 * rankIdx(); }
+  function addXp(n, why) {
+    const before = rankIdx(); CAREER.xp += Math.round(n); saveCareer();
+    const after = rankIdx();
+    if (after > before) { say('Promotion', 0); ui.toast(L(`🎖️ PROMOVARE: ești acum ${rankName(after)}! Ai deblocat ${L(CLASSES[RANKS[after].cls].ro, CLASSES[RANKS[after].cls].en)}.`, `🎖️ PROMOTION: you are now ${rankName(after)}! Unlocked: ${CLASSES[RANKS[after].cls].en}.`), 10000); }
+    ui.renderCareer && ui.renderCareer();
+  }
+  function buyRating(ci) {
+    const c = CLASSES[ci];
+    if (CAREER.ratings.includes(ci)) return;
+    if (ECON.balance < c.price) { ui.toast(L(`Licența costă $${c.price.toLocaleString('en-US')} – nu ai destui bani.`, `The type rating costs $${c.price.toLocaleString('en-US')} – not enough money.`)); return; }
+    ECON.balance -= c.price; saveEcon(); CAREER.ratings.push(ci); saveCareer();
+    ui.toast(L(`Licență de tip cumpărată: ${c.ro}.`, `Type rating purchased: ${c.en}.`)); OFFERS.t = 0;
+    ui.renderMissions && ui.renderMissions(); ui.renderCareer && ui.renderCareer();
+  }
+
+  /* ---------------- Realizări ---------------- */
+  const ACH = [
+    { k: 'first_flight', icon: '🛫', ro: 'Primul zbor', en: 'First flight', dro: 'Termină un zbor', den: 'Complete a flight' },
+    { k: 'butter', icon: '🧈', ro: 'Butter', en: 'Butter', dro: 'Aterizare sub 100 ft/min', den: 'Land below 100 ft/min' },
+    { k: 'butter5', icon: '🧈', ro: 'Mâini de catifea', en: 'Velvet hands', dro: '5 aterizări sub 150 ft/min', den: '5 landings below 150 ft/min' },
+    { k: 'smooth10', icon: '🪶', ro: 'Pasagerii te iubesc', en: 'Passengers love you', dro: '10 aterizări sub 200 ft/min', den: '10 landings below 200 ft/min' },
+    { k: 'precision', icon: '🎯', ro: 'Precizie', en: 'Precision', dro: 'Contact la 150–450 m după prag, sub 3 m de ax', den: 'Touch down 150–450 m past the threshold, within 3 m of the centerline' },
+    { k: 'explorer10', icon: '🗺️', ro: 'Explorator', en: 'Explorer', dro: 'Aterizează la 10 aeroporturi diferite', den: 'Land at 10 different airports' },
+    { k: 'explorer25', icon: '🌍', ro: 'Globetrotter', en: 'Globetrotter', dro: 'Aterizează la 25 de aeroporturi diferite', den: 'Land at 25 different airports' },
+    { k: 'long_haul', icon: '🌐', ro: 'Lung-curier', en: 'Long haul', dro: 'Un zbor de peste 1000 NM', den: 'A single flight over 1000 NM' },
+    { k: 'missions10', icon: '💼', ro: 'Profesionist', en: 'Professional', dro: '10 misiuni îndeplinite', den: '10 missions completed' },
+    { k: 'missions50', icon: '🏢', ro: 'Linie aeriană', en: 'Airline', dro: '50 de misiuni îndeplinite', den: '50 missions completed' },
+    { k: 'rich100k', icon: '💰', ro: 'Bogat', en: 'Rich', dro: 'Sold de $100.000', den: 'Balance of $100,000' },
+    { k: 'hero', icon: '🦸', ro: 'Erou', en: 'Hero', dro: 'Aterizează în siguranță după o urgență', den: 'Land safely after an emergency' },
+    { k: 'deadstick', icon: '🪂', ro: 'Planorist', en: 'Glider pilot', dro: 'Aterizează cu motoarele oprite', den: 'Land with the engines off' },
+    { k: 'school', icon: '🎓', ro: 'Absolvent', en: 'Graduate', dro: 'Termină toate lecțiile școlii de zbor', den: 'Finish every flight school lesson' },
+    { k: 'captain', icon: '👨‍✈️', ro: 'Comandant', en: 'Captain', dro: 'Ajungi la rangul de Comandant', den: 'Reach the rank of Captain' },
+  ];
+  function unlock(code) {
+    if (CAREER.ach[code]) return false;
+    CAREER.ach[code] = Date.now(); saveCareer();
+    const a = ACH.find((x) => x.k === code);
+    if (a) { ui.toast(`${a.icon} ${L('Realizare deblocată: ', 'Achievement unlocked: ')}${L(a.ro, a.en)} (+50 XP)`, 7000); say('Achievement unlocked', 0); }
+    addXp(50);
+    return true;
+  }
+  function checkAchievements(flight) {
+    const log = LOGB.list;
+    if (flight) {
+      unlock('first_flight');
+      if (flight.landing_vs != null && Math.abs(flight.landing_vs) <= 100) unlock('butter');
+      if (flight.tdz_m != null && flight.tdz_m >= 150 && flight.tdz_m <= 450 && flight.cl_m != null && Math.abs(flight.cl_m) < 3) unlock('precision');
+      if (flight.dist_nm >= 1000) unlock('long_haul');
+      if (flight.emergency && flight.landing_score != null && Math.abs(flight.landing_vs) < 900) unlock('hero');
+      if (flight.deadstick) unlock('deadstick');
+    }
+    if (log.filter((f) => f.landing_vs != null && Math.abs(f.landing_vs) <= 150).length >= 5) unlock('butter5');
+    if (log.filter((f) => f.landing_vs != null && Math.abs(f.landing_vs) <= 200).length >= 10) unlock('smooth10');
+    const apts = new Set(log.map((f) => f.arr).filter(Boolean));
+    if (apts.size >= 10) unlock('explorer10');
+    if (apts.size >= 25) unlock('explorer25');
+    if (ECON.missions >= 10) unlock('missions10');
+    if (ECON.missions >= 50) unlock('missions50');
+    if (ECON.balance >= 100000) unlock('rich100k');
+    if (rankIdx() >= 4) unlock('captain');
+    if (LESSONS.every((l) => CAREER.lessons[l.id])) unlock('school');
+  }
+
+  /* ---------------- Jurnal de zbor ---------------- */
+  const LOGB = { list: store.get('geofsCopilotRO.log', []) };
+  const saveLog = () => { try { store.set('geofsCopilotRO.log', LOGB.list.slice(0, 40)); } catch (e) { /* */ } };
+  let FLT = null;          // zborul în desfășurare
+  const FLTS = { airT: 0, groundT: 0, last: null };
+  function flightTick() {
+    const onG = sim.onGround(), v = sim.v(), [lat, lon, altM] = sim.lla(), now = Date.now();
+    // teleportare (salt mare de poziție) = zborul se anulează
+    if (FLTS.last && distM(FLTS.last[0], FLTS.last[1], lat, lon) > 8000 && now - FLTS.last[2] < 2000) { if (FLT && !FLT.lesson) FLT = null; }
+    FLTS.last = [lat, lon, now];
+    if (!onG) { FLTS.airT = FLTS.airT || now; FLTS.groundT = 0; } else { FLTS.groundT = FLTS.groundT || now; FLTS.airT = 0; }
+    if (!FLT && !onG && now - FLTS.airT > 5000 && (v.haglFeet || 0) > 50) {
+      const near = DB.loaded ? nearestAirports(lat, lon, 1)[0] : null;
+      FLT = { t0: now - 5000, dep: near && near.d < 5 * NM ? near.apt : null, aircraft: (sim.ac().definition && sim.ac().definition.name) || sim.ac().id || '?',
+        fuel0: FUEL.kg, dist: 0, track: [[+lat.toFixed(5), +lon.toFixed(5), Math.round(altM)]], lastPt: now, emergency: null, missionPay: 0 };
+    }
+    if (!FLT) return;
+    if (!onG) {
+      FLT.dist += ((v.groundSpeedKnt || 0) * 0.1) / 3600;
+      if (now - FLT.lastPt > 10000) { FLT.track.push([+lat.toFixed(5), +lon.toFixed(5), Math.round(altM)]); FLT.lastPt = now; }
+      FLT.tLand = null;
+    } else {
+      if (!FLT.tLand) { FLT.tLand = now; FLT.engOffAtTouch = !(sim.ac().engine && sim.ac().engine.on); FLT.track.push([+lat.toFixed(5), +lon.toFixed(5), Math.round(altM)]); }
+      // terminat: oprit (sau 90 s la sol)
+      if (((v.groundSpeedKnt || 0) < 5 && now - FLTS.groundT > 3000) || now - FLTS.groundT > 90000) finishFlight();
+    }
+  }
+  function finishFlight() {
+    const f = FLT; FLT = null; if (!f) return;
+    const [lat, lon] = sim.lla();
+    const near = DB.loaded ? nearestAirports(lat, lon, 1)[0] : null;
+    const land = f.landing || null;
+    const rec = {
+      t: f.t0, aircraft: f.aircraft, dep: f.dep, arr: near && near.d < 5 * NM ? near.apt : null,
+      dist_nm: Math.round(f.dist * 10) / 10, duration_min: Math.round(((f.tLand || Date.now()) - f.t0) / 6000) / 10,
+      fuel_kg: f.fuel0 != null && FUEL.kg != null ? Math.max(0, Math.round(f.fuel0 - FUEL.kg)) : null,
+      landing_vs: land ? land.vs : null, landing_g: land ? land.g : null, landing_score: land ? land.score : null, cl_m: land ? land.clM : null, tdz_m: land ? land.tdzM : null,
+      mission_type: f.missionType || null, mission_pay: f.missionPay || 0, mission_result: f.missionResult || null, emergency: f.emergency || null,
+      deadstick: !!f.engOffAtTouch, track: decimate(f.track, 400),
+    };
+    // XP local (aceeași formulă ca pe server)
+    const xp = Math.min(400, Math.round(rec.mission_pay / 50) + (rec.landing_score != null ? Math.floor(rec.landing_score / 5) : 0) + (rec.mission_pay ? 0 : Math.min(60, Math.floor(rec.duration_min / 3))));
+    rec.xp = xp;
+    LOGB.list.unshift(rec); saveLog();
+    if (rec.duration_min >= 1) addXp(xp);
+    resolveEmergency(rec);
+    checkAchievements(rec);
+    submitOnline(rec);
+    ui.renderLog && ui.renderLog();
+  }
+  function decimate(arr, max) { if (arr.length <= max) return arr; const step = arr.length / max; const out = []; for (let i = 0; i < arr.length; i += step) out.push(arr[Math.floor(i)]); out.push(arr[arr.length - 1]); return out; }
+  function careerOnLanding(landingRec) { if (FLT) FLT.landing = landingRec; }
+  function careerOnMission(pay, type, result) { if (FLT) { FLT.missionPay = pay; FLT.missionType = type; FLT.missionResult = result; } else { const f = LOGB.list[0]; if (f && Date.now() - f.t < 3 * 3600000 && !f.mission_type) { f.mission_pay = pay; f.mission_type = type; f.mission_result = result; saveLog(); } } }
+
+  function download(name, text, mime) {
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: mime })); a.download = name;
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  const esc = (s) => String(s == null ? '' : s).replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c]));
+  function exportKml(f) {
+    const coords = f.track.map((p) => `${p[1]},${p[0]},${p[2]}`).join(' ');
+    const name = `${f.dep || '?'} → ${f.arr || '?'} · ${f.aircraft}`;
+    download(`geofs-${f.dep || 'X'}-${f.arr || 'X'}-${new Date(f.t).toISOString().slice(0, 10)}.kml`,
+      `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${esc(name)}</name>
+<Style id="t"><LineStyle><color>ffff40e0</color><width>3</width></LineStyle></Style>
+<Placemark><name>${esc(name)}</name><description>${esc(`${f.dist_nm} NM · ${f.duration_min} min · landing ${f.landing_vs ?? '—'} fpm, score ${f.landing_score ?? '—'}`)}</description><styleUrl>#t</styleUrl>
+<LineString><altitudeMode>absolute</altitudeMode><coordinates>${coords}</coordinates></LineString></Placemark></Document></kml>`, 'application/vnd.google-earth.kml+xml');
+  }
+  function exportGpx(f) {
+    const pts = f.track.map((p) => `<trkpt lat="${p[0]}" lon="${p[1]}"><ele>${p[2]}</ele></trkpt>`).join('');
+    download(`geofs-${f.dep || 'X'}-${f.arr || 'X'}.gpx`, `<?xml version="1.0" encoding="UTF-8"?><gpx version="1.1" creator="GeoFS Copilot" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>${esc((f.dep || '?') + ' - ' + (f.arr || '?'))}</name><trkseg>${pts}</trkseg></trk></gpx>`, 'application/gpx+xml');
+  }
+  function exportCsv() {
+    const cols = ['date', 'aircraft', 'dep', 'arr', 'dist_nm', 'duration_min', 'fuel_kg', 'landing_vs', 'landing_g', 'landing_score', 'mission_type', 'mission_pay', 'emergency', 'xp'];
+    const rows = LOGB.list.map((f) => cols.map((c) => (c === 'date' ? new Date(f.t).toISOString() : f[c] ?? '')).map((x) => `"${String(x).replace(/"/g, '""')}"`).join(','));
+    download('geofs-logbook.csv', cols.join(',') + '\n' + rows.join('\n'), 'text/csv');
+  }
+
+  /* ---------------- Online: trimitere zboruri + clasament ---------------- */
+  async function rpc(fn, body) {
+    const r = await fetch(`${ONLINE.url}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { apikey: ONLINE.key, 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+    const j = await r.json().catch(() => null);
+    if (!r.ok) throw new Error((j && j.message) || 'HTTP ' + r.status);
+    return j;
+  }
+  async function submitOnline(rec) {
+    if (!settings.onlineSync || rec.duration_min < 1) return;
+    try {
+      const flight = Object.assign({}, rec); delete flight.track; delete flight.t; delete flight.deadstick;
+      const res = await rpc('submit_flight', { p_key: CAREER.key, p_callsign: myCallsign(), p_flight: flight, p_achievements: Object.keys(CAREER.ach).concat(Object.keys(CAREER.lessons).map((k) => 'lesson_' + k)) });
+      CAREER.pilotId = res.pilot_id; CAREER.rankPos = res.rank_pos;
+      if (res.xp != null && res.xp > CAREER.xp) CAREER.xp = res.xp; // serverul e sursa de adevăr
+      saveCareer(); rec.online = true; saveLog();
+      ui.toast(L(`🌐 Zbor publicat · locul #${res.rank_pos} în clasament`, `🌐 Flight published · #${res.rank_pos} on the leaderboard`), 6000);
+      LB.t = 0; ui.renderCareer && ui.renderCareer();
+    } catch (e) { console.warn('[GeoFS Copilot] online', e.message); rec.onlineErr = e.message; saveLog(); }
+  }
+  const LB = { t: 0, list: [], err: null };
+  async function loadLeaderboard() {
+    if (Date.now() - LB.t < 60000) return;
+    LB.t = Date.now();
+    try { LB.list = await rpc('get_leaderboard', { p_sort: 'xp', p_limit: 10 }); LB.err = null; } catch (e) { LB.err = e.message; }
+    ui.renderCareer && ui.renderCareer();
+  }
+
+  /* ---------------- Urgențe și defecțiuni ---------------- */
+  const EMERG = { active: null, nextT: 0, flightHad: false };
+  const ETYPES = {
+    engine: { icon: '🔥', ro: 'Motor defect', en: 'Engine failure' },
+    gear: { icon: '⚙️', ro: 'Trenul de aterizare blocat', en: 'Landing gear jammed' },
+    bird: { icon: '🐦', ro: 'Impact cu pasăre – motor avariat', en: 'Bird strike – engine damaged' },
+    leak: { icon: '💧', ro: 'Scurgere de combustibil', en: 'Fuel leak' },
+    medical: { icon: '🚑', ro: 'Urgență medicală la bord', en: 'Medical emergency on board' },
+    apfail: { icon: '⚡', ro: 'Defecțiune autopilot', en: 'Autopilot failure' },
+  };
+  function triggerEmergency(type) {
+    if (EMERG.active) return;
+    const list = engines(); const multi = list.length > 1;
+    if (!type) {
+      const pool = ['engine', 'gear', 'bird', 'leak', 'apfail'];
+      if (MISSION && MISSION.isPax) pool.push('medical', 'medical');
+      type = pool[Math.floor(Math.random() * pool.length)];
+    }
+    const e = { type, t0: Date.now(), multi, engIdx: multi ? Math.floor(Math.random() * list.length) : 0 };
+    if (type === 'engine') { if (multi) engSetMode(e.engIdx, 'off'); else e.dead = true; }
+    if (type === 'bird') { ENG.levers[e.engIdx] = 0.35; engSetMode(e.engIdx, 'man'); }
+    if (type === 'gear') e.gearStuck = true;
+    if (type === 'apfail') { e.apUntil = Date.now() + 180000; if (geofs.autopilot.on) geofs.autopilot.turnOff(); }
+    if (type === 'medical') e.deadline = Date.now() + 35 * 60000;
+    EMERG.active = e; EMERG.flightHad = true;
+    if (FLT) FLT.emergency = type;
+    say(type === 'medical' ? 'Medical emergency' : type === 'engine' ? 'Engine failure' : 'Caution, ' + ETYPES[type].en, 0);
+    ui.showEmergency();
+  }
+  function emergencyTick() {
+    const e = EMERG.active, onG = sim.onGround();
+    if (!e) {
+      if (onG || settings.failures === 'off' || LES.id || !FLT) return;
+      if ((sim.v().haglFeet || 0) < 1500 || EMERG.flightHad) return;
+      if (Date.now() < EMERG.nextT) return; EMERG.nextT = Date.now() + 10000;
+      const perHour = settings.failures === 'normal' ? 0.45 : 0.12;
+      if (Math.random() < perHour / 360) triggerEmergency();
+      return;
+    }
+    if (e.type === 'engine' && e.dead && sim.ac().engine && sim.ac().engine.on) controls.setters.toggleEngines.set();
+    if (e.type === 'gear' && e.gearStuck && controls.gear.target === 0) controls.setters.setGearUp.set();
+    if (e.type === 'leak' && FUEL.kg != null) { const p = acProfile(); FUEL.kg = Math.max(0, FUEL.kg - (p.capKg * 0.3 / 3600) * 0.1); }
+    if (e.type === 'apfail' && Date.now() < e.apUntil && geofs.autopilot.on) { geofs.autopilot.turnOff(); if (AP.active) disengage(true); }
+    if (e.type === 'apfail' && Date.now() >= e.apUntil && !e.apBack) { e.apBack = true; ui.toast(L('Autopilotul funcționează din nou.', 'The autopilot works again.')); }
+    if (e.crank && Date.now() >= e.crank) { e.crank = 0; e.gearStuck = false; controls.setters.setGearDown.set(); ui.toast(L('Trenul a coborât prin sistemul de rezervă ✓', 'Gear extended with the alternate system ✓')); ui.showEmergency(); }
+  }
+  function emergencyAction(kind) {
+    const e = EMERG.active; if (!e) return;
+    if (kind === 'restart') {
+      if (Date.now() - e.t0 < 45000) { ui.toast(L('Prea devreme – așteaptă să se răcească motorul (45 s).', 'Too early – wait for the engine to cool (45 s).')); return; }
+      if (Math.random() < 0.35) { if (e.multi) engSetMode(e.engIdx, 'link'); else { e.dead = false; if (!sim.ac().engine.on) controls.setters.toggleEngines.set(); } e.restarted = true; ui.toast(L('Motorul a repornit ✓', 'Engine restarted ✓')); say('Engine restarted', 0); }
+      else { e.t0 = Date.now(); ui.toast(L('Repornire eșuată. Mai poți încerca peste 45 s – sau deviază.', 'Restart failed. Try again in 45 s – or divert.')); }
+    }
+    if (kind === 'crank') { e.crank = Date.now() + 20000; ui.toast(L('Cobori trenul manual… (20 s)', 'Cranking the gear down manually… (20 s)')); }
+    if (kind === 'divert') divertNearest();
+    if (kind === 'mayday') atcSend(`MAYDAY MAYDAY MAYDAY ${myCallsign()} ${ETYPES[e.type].en} #MSG`);
+    ui.showEmergency();
+  }
+  function divertNearest() {
+    const [lat, lon] = sim.lla();
+    const need = isLight() ? 2000 : 5500;
+    const cand = nearestAirports(lat, lon, 10, (a, len) => len >= need)[0];
+    if (!cand) { ui.toast(L('Nu am găsit un aeroport potrivit în apropiere.', 'No suitable airport nearby.')); return; }
+    if (MISSION) { MISSION.divertApt = cand.apt; saveMission(); }
+    const keepTrip = TRIP.stops.slice();
+    setSingleDestination(cand.apt);
+    if (MISSION) { TRIP.after = keepTrip; }
+    if (sim.hasAP() && !(EMERG.active && EMERG.active.type === 'apfail' && Date.now() < EMERG.active.apUntil)) engage();
+    ui.toast(L(`Deviere spre ${aptName(cand.apt)} (${(cand.d / NM).toFixed(0)} NM).`, `Diverting to ${aptName(cand.apt)} (${(cand.d / NM).toFixed(0)} NM).`), 8000);
+  }
+  function resolveEmergency(rec) {
+    const e = EMERG.active; EMERG.flightHad = false;
+    if (!e) return;
+    engines().forEach((x, i) => { if (ENG.modes[i] !== 'link') engSetMode(i, 'link'); });
+    EMERG.active = null; ui.hideEmergency();
+    if (rec && rec.landing_score != null && Math.abs(rec.landing_vs) < 900) ui.toast(L('Urgență gestionată – ai adus avionul la sol în siguranță! 🦸', 'Emergency handled – you brought the aircraft down safely! 🦸'), 8000);
+  }
+  ui.showEmergency = () => {
+    const e = EMERG.active; if (!e) return;
+    let c = document.getElementById('gcr-emerg');
+    if (!c) { c = el('div', { id: 'gcr-emerg' }); ['mousedown', 'pointerdown'].forEach((t) => c.addEventListener(t, (ev) => ev.stopPropagation())); document.body.append(c); }
+    const T = ETYPES[e.type];
+    const steps = {
+      engine: e.multi ? [L('Menține viteza și direcția – compensează cu direcția (palonier).', 'Keep speed and heading – counter the yaw with rudder.'), L('Motorul defect e tăiat automat. Poți încerca o repornire după 45 s.', 'The failed engine is shut down. You can try a restart after 45 s.'), L('Deviază spre cel mai apropiat aeroport.', 'Divert to the nearest airport.')]
+        : [L('MOTORUL S-A OPRIT! Coboară botul și menține viteza de planare.', 'ENGINE OUT! Lower the nose and keep glide speed.'), L('Caută cel mai apropiat aeroport sau un teren liber.', 'Find the nearest airport or open field.'), L('Poți încerca o repornire după 45 s.', 'You can try a restart after 45 s.')],
+      gear: [L('Trenul nu coboară normal.', 'The gear will not extend normally.'), L('Folosește coborârea de rezervă (durează 20 s).', 'Use the alternate extension (takes 20 s).'), L('Verifică că trenul e jos înainte de aterizare.', 'Check the gear is down before landing.')],
+      bird: [L(`Motorul ${e.engIdx + 1} a pierdut putere (35%).`, `Engine ${e.engIdx + 1} has lost power (35%).`), L('Redu viteza, evită manevrele bruște.', 'Reduce speed, avoid abrupt manoeuvres.'), L('Deviază spre cel mai apropiat aeroport.', 'Divert to the nearest airport.')],
+      leak: [L('Pierzi combustibil rapid!', 'You are losing fuel fast!'), L('Verifică autonomia în caseta de instrucțiuni.', 'Watch your endurance in the instruction box.'), L('Aterizează cât mai repede.', 'Land as soon as possible.')],
+      medical: [L('Un pasager are nevoie urgentă de spital.', 'A passenger urgently needs a hospital.'), L(`Aterizează în ${Math.max(0, Math.round((e.deadline - Date.now()) / 60000))} min la cel mai apropiat aeroport.`, `Land within ${Math.max(0, Math.round((e.deadline - Date.now()) / 60000))} min at the nearest airport.`), L('Misiunea se plătește la aeroportul de deviere (70% + bonus $800).', 'The mission is paid at the diversion airport (70% + $800 bonus).')],
+      apfail: [L('Autopilotul nu funcționează 3 minute.', 'The autopilot is out for 3 minutes.'), L('Zboară manual: menține altitudinea și direcția din instrucțiuni.', 'Fly by hand: hold the altitude and heading from the instructions.')],
+    }[e.type];
+    const B = (t, k, cls) => el('button', { class: 'gcr-btn sm ' + (cls || ''), onclick: () => emergencyAction(k) }, t);
+    c.innerHTML = '';
+    c.append(el('div', { class: 'title' }, `${T.icon} ${L(T.ro, T.en)}`),
+      el('ol', {}, ...steps.map((s) => el('li', {}, s))),
+      el('div', { class: 'gcr-row', style: 'justify-content:center' },
+        B(L('Deviază la cel mai apropiat aeroport', 'Divert to nearest airport'), 'divert', 'warn'),
+        (e.type === 'engine' && !e.restarted) ? B(L('Încearcă repornirea', 'Try restart'), 'restart') : null,
+        (e.type === 'gear' && e.gearStuck && !e.crank) ? B(L('Coborâre de rezervă a trenului', 'Alternate gear extension'), 'crank') : null,
+        B('MAYDAY', 'mayday'),
+        el('button', { class: 'gcr-btn sm', onclick: () => ui.hideEmergency() }, L('Ascunde', 'Hide'))));
+    c.style.display = 'block';
+  };
+  ui.hideEmergency = () => { const c = document.getElementById('gcr-emerg'); if (c) c.style.display = 'none'; };
+
+  /* ---------------- Școala de zbor ---------------- */
+  const LES = { id: null, i: 0, t0: 0, st: {} };
+  function nearAptOrAny() { const [la, lo] = sim.lla(); return nearestAirports(la, lo, 1, (a, len) => len >= (isLight() ? 2000 : 6000))[0]; }
+  function setupOnRunway(then) {
+    const a = nearAptOrAny(); if (!a) return;
+    const r = bestRunwayForDeparture(a.apt);
+    if (geofs.autopilot.on) geofs.autopilot.turnOff(); disengage(true);
+    positionOnRunway(r, () => { controls.throttle = 0; sim.ac().brakesOn = true; LES.st.rwy = r; if (then) then(r); });
+  }
+  function setupFinal(nm) {
+    const a = nearAptOrAny(); if (!a) return;
+    selectRunway(bestRunway(a.apt));
+    const r = AP.rwy, d = nm * NM;
+    const [la, lo] = destPoint(r.lat, r.lon, norm360(r.hdg + 180), d);
+    if (geofs.autopilot.on) geofs.autopilot.turnOff(); disengage(true);
+    geofs.flyTo([la, lo, gpAltM(d), r.hdg, true, suggestedVapp() + 10]);
+    setTimeout(() => { if (controls.gear.target === 0) controls.setters.setGearUp.set(); }, 1500);
+  }
+  const hold = (key, cond, secs) => { if (cond) { LES.st[key] = LES.st[key] || Date.now(); return Date.now() - LES.st[key] >= secs * 1000; } LES.st[key] = 0; return false; };
+  const LESSONS = [
+    { id: 'takeoff', icon: '🛫', ro: 'Prima decolare', en: 'First takeoff', xp: 50, setup: () => setupOnRunway(),
+      steps: [
+        { ro: 'Eliberează frâna de parcare (tasta ;)', en: 'Release the parking brake (key ;)', ok: () => !sim.ac().brakesOn },
+        { ro: 'Motor la maxim (tasta Page Up sau maneta)', en: 'Full power (Page Up or the throttle)', ok: () => (controls.throttle || 0) > 0.9 },
+        { ro: 'Ține avionul pe ax și accelerează până la viteza de decolare', en: 'Keep it on the centerline and accelerate to rotation speed', ok: () => (sim.v().kias || 0) >= vrSpeed() },
+        { ro: 'Trage ușor de manșă (săgeata jos) – desprinde-te de pistă', en: 'Pull back gently (down arrow) – lift off', ok: () => !sim.onGround() && (sim.v().haglFeet || 0) > 30 },
+        { ro: 'Ridică trenul (tasta G)', en: 'Raise the gear (key G)', ok: () => controls.gear.target === 1 },
+        { ro: 'Urcă până la 1000 ft deasupra solului', en: 'Climb to 1000 ft above the ground', ok: () => (sim.v().haglFeet || 0) > 1000 },
+      ] },
+    { id: 'handling', icon: '🔄', ro: 'Zbor la orizontală și viraje', en: 'Straight & level and turns', xp: 50,
+      setup: () => { const a = nearAptOrAny(); if (!a) return; const [la, lo] = destPoint(a.a.lat, a.a.lon, 180, 5 * NM); if (geofs.autopilot.on) geofs.autopilot.turnOff(); disengage(true); LES.st.base = Math.round((a.a.elevFt || 0) / 100) * 100 + 3000; geofs.flyTo([la, lo, LES.st.base * FT, 0, true, Math.round(suggestedVapp() * 1.5)]); },
+      steps: [
+        { ro: 'Autopilotul e oprit. Menține altitudinea (±200 ft) 20 de secunde', en: 'Autopilot is off. Hold altitude (±200 ft) for 20 seconds', ok: () => hold('a', Math.abs(sim.altFt() - LES.st.base) < 200, 20) },
+        { ro: 'Virează la dreapta până la capul 090° (±5°), fără să pierzi altitudine', en: 'Turn right to heading 090° (±5°) without losing altitude', ok: () => Math.abs(norm180(sim.v().heading - 90)) < 5 && Math.abs(sim.altFt() - LES.st.base) < 300 },
+        { ro: 'Menține capul 090° și altitudinea 15 secunde', en: 'Hold heading 090° and altitude for 15 seconds', ok: () => hold('b', Math.abs(norm180(sim.v().heading - 90)) < 6 && Math.abs(sim.altFt() - LES.st.base) < 250, 15) },
+        { ro: () => L(`Urcă la ${LES.st.base + 1000} ft`, `Climb to ${LES.st.base + 1000} ft`), ok: () => Math.abs(sim.altFt() - (LES.st.base + 1000)) < 150 },
+        { ro: 'Virează la stânga până la capul 360° (±5°)', en: 'Turn left to heading 360° (±5°)', ok: () => Math.abs(norm180(sim.v().heading - 0)) < 5 },
+        { ro: () => L(`Coboară înapoi la ${LES.st.base} ft și menține 10 secunde`, `Descend back to ${LES.st.base} ft and hold for 10 seconds`), ok: () => hold('c', Math.abs(sim.altFt() - LES.st.base) < 150, 10) },
+      ] },
+    { id: 'landing', icon: '🛬', ro: 'Apropiere și aterizare', en: 'Approach and landing', xp: 50, setup: () => setupFinal(6),
+      steps: [
+        { ro: 'Coboară trenul (tasta G)', en: 'Lower the gear (key G)', ok: () => controls.gear.target === 0 },
+        { ro: 'Pune flapsurile (tasta ] sau panoul Avion)', en: 'Set the flaps (key ] or the Aircraft panel)', ok: () => !sim.flapsSteps() || controls.flaps.target >= 1 },
+        { ro: 'Urmează acele ILS din HUD: fii pe ax și pe pantă la 1000 ft', en: 'Follow the ILS needles in the HUD: be on centerline and glide path at 1000 ft', ok: () => { const s = approachState(); return s && s.hatFt < 1000 && Math.abs(s.locDots) < 1.2 && Math.abs(s.gsDots) < 1.2; } },
+        { ro: 'Aterizează: redu motorul și fă flare-ul aproape de sol', en: 'Land: reduce power and flare close to the ground', ok: () => sim.onGround() },
+        { ro: 'Frânează până te oprești', en: 'Brake to a stop', ok: () => (sim.v().groundSpeedKnt || 0) < 5 },
+      ], pass: () => { const l = store.get(LS_LANDINGS, [])[0]; return !l || Date.now() - Date.parse(l.date) > 600000 ? true : l.score >= 45; } },
+    { id: 'engine_out', icon: '🔥', ro: 'Motor defect după decolare', en: 'Engine failure after takeoff', xp: 50, setup: () => setupOnRunway(),
+      steps: [
+        { ro: 'Decolează (frână liberă, motor la maxim, rotire la Vr)', en: 'Take off (brake off, full power, rotate at Vr)', ok: () => !sim.onGround() && (sim.v().haglFeet || 0) > 600 },
+        { ro: 'MOTOR DEFECT! Păstrează viteza peste Vr și aripile drepte', en: 'ENGINE FAILURE! Keep speed above Vr and wings level', ok: () => { if (!EMERG.active) triggerEmergency('engine'); return hold('e', (sim.v().kias || 0) > vrSpeed() && Math.abs(sim.v().aroll || 0) < 20, 10); } },
+        { ro: 'Întoarce-te și aterizează în siguranță pe orice aeroport (folosește „Deviază”)', en: 'Turn back and land safely at any airport (use “Divert”)', ok: () => sim.onGround() && (sim.v().groundSpeedKnt || 0) < 5 },
+      ] },
+    { id: 'precision', icon: '🎯', ro: 'Aterizare de precizie', en: 'Precision landing', xp: 50, setup: () => setupFinal(5),
+      steps: [
+        { ro: 'Configurează avionul: tren jos, flapsuri', en: 'Configure: gear down, flaps', ok: () => controls.gear.target === 0 && (!sim.flapsSteps() || controls.flaps.target >= 1) },
+        { ro: 'Aterizează la 150–600 m după prag, sub 5 m de ax și sub 250 ft/min', en: 'Touch down 150–600 m past the threshold, within 5 m of centerline, below 250 ft/min', ok: () => sim.onGround() && (sim.v().groundSpeedKnt || 0) < 40 },
+      ], pass: () => { const l = store.get(LS_LANDINGS, [])[0]; return l && l.tdzM >= 150 && l.tdzM <= 600 && Math.abs(l.clM || 99) < 5 && Math.abs(l.vs) < 250; } },
+  ];
+  function startLesson(id) {
+    const les = LESSONS.find((l) => l.id === id); if (!les) return;
+    if (MISSION) { ui.toast(L('Termină sau anulează misiunea înainte de o lecție.', 'Finish or cancel your mission before a lesson.')); return; }
+    LES.id = id; LES.i = 0; LES.t0 = Date.now(); LES.st = {};
+    les.setup();
+    ui.toast(`${les.icon} ${L('Lecție: ', 'Lesson: ')}${L(les.ro, les.en)}`, 5000);
+    ui.renderTraining && ui.renderTraining();
+  }
+  function stopLesson(msg) { LES.id = null; if (msg) ui.toast(msg, 7000); ui.renderTraining && ui.renderTraining(); }
+  function lessonTick() {
+    if (!LES.id) return;
+    const les = LESSONS.find((l) => l.id === LES.id); if (!les) return;
+    if (Date.now() - LES.t0 < 6000) return; // lăsăm teleportarea să se termine
+    const step = les.steps[LES.i];
+    if (step && step.ok()) {
+      LES.i++; say(LES.i < les.steps.length ? 'Good' : 'Lesson complete', 0);
+      if (LES.i >= les.steps.length) {
+        setTimeout(() => {
+          const passed = !les.pass || les.pass();
+          if (passed) {
+            const first = !CAREER.lessons[les.id];
+            CAREER.lessons[les.id] = Date.now(); saveCareer();
+            if (first) addXp(les.xp);
+            stopLesson(`🎓 ${L('Lecție terminată: ', 'Lesson complete: ')}${L(les.ro, les.en)}${first ? ` (+${les.xp} XP)` : ''}`);
+            checkAchievements();
+          } else stopLesson(L('Aproape! Lecția nu a fost trecută – mai încearcă.', 'Almost! Lesson not passed – try again.'));
+          if (EMERG.active) resolveEmergency(null);
+        }, 2500);
+      }
+      ui.renderTraining && ui.renderTraining();
+    }
+  }
+  function lessonLines() {
+    if (!LES.id) return [];
+    const les = LESSONS.find((l) => l.id === LES.id); const step = les && les.steps[LES.i];
+    if (!step) return [[`🎓 ${L(les.ro, les.en)} – ${L('se evaluează…', 'evaluating…')}`, 'h']];
+    const txt = typeof step.ro === 'function' ? step.ro() : L(step.ro, step.en);
+    return [[`🎓 ${L('Pasul', 'Step')} ${LES.i + 1}/${les.steps.length}: ${txt}`, 'h'], [`${L(les.ro, les.en)} · Shift+P = ${L('oprește lecția', 'stop lesson')}`, 'm']];
+  }
+
+  /* ---------------- Interfață: Carieră, Școală, Jurnal ---------------- */
+  function buildCareerPage(p) {
+    const box = el('div'); p.append(box);
+    ui.renderCareer = () => {
+      const ri = rankIdx(), r = RANKS[ri], nx = RANKS[ri + 1];
+      const prog = nx ? clamp((CAREER.xp - r.xp) / (nx.xp - r.xp), 0, 1) : 1;
+      const ci = acClass();
+      box.innerHTML = '';
+      box.append(el('div', { class: 'gcr-destcard', style: 'margin-top:0' },
+        el('div', { class: 'gcr-muted', style: 'font-size:11px' }, L('RANGUL TĂU', 'YOUR RANK')),
+        el('div', { style: 'font-size:17px;font-weight:800' }, `👨‍✈️ ${rankName(ri)}`),
+        el('div', { class: 'gcr-bar', style: 'margin:6px 0 3px' }, el('div', { style: `width:${Math.round(prog * 100)}%;background:#e040fb` })),
+        el('div', { class: 'gcr-muted' }, `${CAREER.xp.toLocaleString('en-US')} XP` + (nx ? ` · ${L('următorul rang', 'next rank')}: ${L(nx.ro, nx.en)} ${L('la', 'at')} ${nx.xp.toLocaleString('en-US')} XP` : ' · MAX')),
+        el('div', { class: 'gcr-muted' }, `${L('Bonus de plată la misiuni', 'Mission pay bonus')}: +${Math.round((payMul() - 1) * 100)}%`)));
+      // licențe
+      const lic = el('div', { class: 'gcr-list', style: 'max-height:none;margin-top:6px' });
+      CLASSES.forEach((c, k) => {
+        const ok = classAllowed(k), byRank = k <= r.cls;
+        lic.append(el('div', { class: 'gcr-item' + (k === ci ? ' sel' : '') },
+          el('span', {}, (ok ? '✅ ' : '🔒 ') + L(c.ro, c.en) + (k === ci ? L(' (avionul tău)', ' (your aircraft)') : '')),
+          ok ? el('span', { class: 'gcr-muted' }, byRank ? L('prin rang', 'by rank') : L('licență cumpărată', 'type rating')) :
+            el('button', { class: 'gcr-btn sm', onclick: () => buyRating(k) }, `${L('Cumpără', 'Buy')} $${c.price.toLocaleString('en-US')}`)));
+      });
+      box.append(el('b', { style: 'display:block;margin-top:8px' }, L('Licențe de tip (ce avioane poți folosi în misiuni)', 'Type ratings (aircraft you may fly on missions)')), lic);
+      // realizări
+      const achBox = el('div', { class: 'gcr-ach' });
+      ACH.forEach((a) => achBox.append(el('div', { class: 'a' + (CAREER.ach[a.k] ? ' on' : ''), title: L(a.dro, a.den) }, el('span', { class: 'i' }, a.icon), el('span', {}, L(a.ro, a.en)))));
+      box.append(el('b', { style: 'display:block;margin-top:8px' }, `${L('Realizări', 'Achievements')} ${Object.keys(CAREER.ach).length}/${ACH.length}`), achBox);
+      // clasament online
+      const lb = el('div', { class: 'gcr-list', style: 'max-height:none' });
+      if (!settings.onlineSync) lb.append(el('div', { class: 'gcr-item gcr-muted' }, L('Publicarea online e oprită (Setări).', 'Online publishing is off (Settings).')));
+      else if (LB.err) lb.append(el('div', { class: 'gcr-item gcr-muted' }, L('Clasamentul nu s-a putut încărca.', 'The leaderboard could not be loaded.')));
+      else if (!LB.list.length) lb.append(el('div', { class: 'gcr-item gcr-muted' }, L('Încă nimeni în clasament – fii primul!', 'Nobody on the leaderboard yet – be the first!')));
+      LB.list.forEach((x) => lb.append(el('div', { class: 'gcr-item' + (x.id === CAREER.pilotId ? ' sel' : '') },
+        el('span', {}, el('b', {}, `#${x.pos} `), x.callsign, el('span', { class: 'gcr-muted' }, ` · ${rankName(rankIdx(x.xp))}`)),
+        el('span', { class: 'gcr-muted' }, `${x.xp.toLocaleString('en-US')} XP · ${x.flights} ${L('zboruri', 'flights')}`))));
+      box.append(el('div', { class: 'gcr-row', style: 'margin-top:8px;justify-content:space-between' }, el('b', {}, '🌐 ' + L('Clasament online', 'Online leaderboard')),
+        el('a', { href: ONLINE.site, target: '_blank', rel: 'noopener', class: 'gcr-link' }, L('vezi site-ul →', 'open the website →'))), lb,
+        CAREER.rankPos ? el('div', { class: 'gcr-muted' }, L(`Locul tău: #${CAREER.rankPos}`, `Your position: #${CAREER.rankPos}`)) : null);
+      if (settings.onlineSync) loadLeaderboard();
+    };
+    ui.renderCareer();
+  }
+  function buildTrainingPage(p) {
+    const box = el('div'); p.append(box);
+    ui.renderTraining = () => {
+      box.innerHTML = '';
+      box.append(el('div', { class: 'gcr-muted', style: 'margin-bottom:6px' }, L('Fiecare lecție te pune în situație (pe pistă sau pe finală) și îți dă pașii în caseta de instrucțiuni. Autopilotul e oprit – zbori tu.', 'Each lesson sets you up (on the runway or on final) and shows the steps in the instruction box. The autopilot is off – you fly.')));
+      LESSONS.forEach((l) => {
+        const done = CAREER.lessons[l.id], running = LES.id === l.id;
+        box.append(el('div', { class: 'gcr-item' + (running ? ' sel' : '') },
+          el('span', {}, `${done ? '✅' : l.icon} `, el('b', {}, L(l.ro, l.en)), el('span', { class: 'gcr-muted' }, ` · ${l.steps.length} ${L('pași', 'steps')} · +${l.xp} XP`)),
+          running ? el('button', { class: 'gcr-btn sm warn', onclick: () => stopLesson(L('Lecție oprită.', 'Lesson stopped.')) }, L('Oprește', 'Stop'))
+            : el('button', { class: 'gcr-btn sm ok', onclick: () => startLesson(l.id) }, done ? L('Reia', 'Retry') : L('Începe', 'Start'))));
+      });
+      box.append(el('b', { style: 'display:block;margin-top:10px' }, L('Urgențe de antrenament', 'Emergency training')),
+        el('div', { class: 'gcr-muted' }, L('Declanșează o defecțiune acum (doar în zbor):', 'Trigger a failure now (in flight only):')),
+        el('div', { class: 'gcr-row' }, ...Object.keys(ETYPES).filter((k) => k !== 'medical' || (MISSION && MISSION.isPax)).map((k) =>
+          el('button', { class: 'gcr-btn sm', onclick: () => { if (sim.onGround()) { ui.toast(L('Doar în zbor.', 'In flight only.')); return; } triggerEmergency(k); } }, `${ETYPES[k].icon} ${L(ETYPES[k].ro, ETYPES[k].en)}`))));
+    };
+    ui.renderTraining();
+  }
+  function buildLogPage(p) {
+    const box = el('div'); p.append(box);
+    ui.renderLog = () => {
+      box.innerHTML = '';
+      const tot = LOGB.list.reduce((s, f) => ({ h: s.h + f.duration_min / 60, nm: s.nm + f.dist_nm }), { h: 0, nm: 0 });
+      box.append(el('div', { class: 'gcr-row', style: 'justify-content:space-between' },
+        el('span', {}, `📒 ${LOGB.list.length} ${L('zboruri', 'flights')} · ${tot.h.toFixed(1)} h · ${Math.round(tot.nm).toLocaleString('en-US')} NM`),
+        el('button', { class: 'gcr-btn sm', onclick: exportCsv }, L('Export CSV', 'Export CSV'))));
+      const list = el('div', { class: 'gcr-list', style: 'max-height:360px' });
+      if (!LOGB.list.length) list.append(el('div', { class: 'gcr-item gcr-muted' }, L('Zborurile apar aici automat după aterizare.', 'Flights appear here automatically after landing.')));
+      LOGB.list.forEach((f) => {
+        const d = new Date(f.t);
+        list.append(el('div', { class: 'gcr-item', style: 'display:block' },
+          el('div', { style: 'display:flex;justify-content:space-between;gap:6px' },
+            el('b', {}, `${f.dep ? aptName(f.dep) : '?'} → ${f.arr ? aptName(f.arr) : '?'}`),
+            el('span', { class: 'gcr-muted' }, `${d.toLocaleDateString()} ${d.toTimeString().slice(0, 5)}`)),
+          el('div', { class: 'gcr-muted', style: 'font-size:11px' },
+            `${f.aircraft} · ${f.dist_nm} NM · ${Math.round(f.duration_min)} min` + (f.fuel_kg != null ? ` · ⛽ ${f.fuel_kg} kg` : '') +
+            (f.landing_vs != null ? ` · ${f.landing_vs} fpm (${f.landing_score})` : '') + (f.mission_pay ? ` · $${f.mission_pay}` : '') +
+            (f.emergency ? ` · ⚠ ${L(ETYPES[f.emergency].ro, ETYPES[f.emergency].en)}` : '') + ` · +${f.xp} XP` + (f.online ? ' · 🌐' : '')),
+          el('div', { class: 'gcr-row', style: 'margin:3px 0 0' },
+            el('button', { class: 'gcr-btn sm', onclick: () => exportKml(f) }, 'Google Earth (KML)'),
+            el('button', { class: 'gcr-btn sm', onclick: () => exportGpx(f) }, 'GPX'))));
+      });
+      box.append(list);
+    };
+    ui.renderLog();
+  }
+
   /* ---------------- Taste rapide ---------------- */
   function bindKeys() {
     window.addEventListener('keydown', (e) => {
@@ -3080,7 +3605,7 @@ function gcrMain() {
         M: () => toggleNd(),
         Y: () => atcAccept(),
         U: () => atcRefuse(),
-        P: () => (AP.phase === 'STOPOVER' ? departStopover() : AP.phase === 'WAITTO' ? (AP.phase = 'MAN', AP.active = false, ui.renderNav()) : (AP.active ? disengage() : engageFull())),
+        P: () => LES.id ? stopLesson(L('Lecție oprită.', 'Lesson stopped.')) : (AP.phase === 'STOPOVER' ? departStopover() : AP.phase === 'WAITTO' ? (AP.phase = 'MAN', AP.active = false, ui.renderNav()) : (AP.active ? disengage() : engageFull())),
         H: () => { settings.hudVisible = !settings.hudVisible; saveSettings(); ui.hud.style.display = settings.hudVisible ? '' : 'none'; },
         L: () => (AP.active ? disengage() : engage()),
         R: teleportFinal,
