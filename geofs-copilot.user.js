@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.7.0
+// @version      1.7.1
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -122,7 +122,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.7.0';
+  const VERSION = '1.7.1';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -1308,6 +1308,7 @@ function gcrMain() {
   .gcr-ach .a{display:flex;gap:5px;align-items:center;padding:4px 6px;border:1px solid #26354b;border-radius:6px;opacity:.4;font-size:11px;cursor:help}
   .gcr-ach .a.on{opacity:1;border-color:#8d6e00;background:#2a2005}
   .gcr-ach .i{font-size:15px}
+  .gcr-code{font:11px ui-monospace,Consolas,monospace;background:#0b1220;border:1px solid #33465f;border-radius:5px;padding:2px 5px;word-break:break-all;flex:1}
   .gcr-kbd{display:inline-block;background:#0c1320;border:1px solid #33465f;border-radius:4px;padding:0 5px;font-family:monospace;color:#fff}
   `;
 
@@ -1350,6 +1351,8 @@ function gcrMain() {
     // Când avionul e schimbat sau zborul resetat, pistele trebuie redesenate
     try { $(document).on('flyto', () => setTimeout(() => { if (AP.rwy) { buildRoute(); drawApproach(); } }, 1500)); } catch (e) { /* */ }
     loadRunways();
+    setTimeout(() => { try { cloudInit(); } catch (e) { /* */ } }, 4000);
+    setInterval(() => { try { cloudSave(false); } catch (e) { /* */ } }, 30000);
     ui.toast(L('GeoFS Copilot RO încărcat – Shift+N deschide/închide panoul.', 'GeoFS Copilot loaded – Shift+N opens/closes the panel.'));
   }
 
@@ -2795,7 +2798,7 @@ function gcrMain() {
    * ===================================================================== */
   const FUEL_PRICE = 0.35;         // $/kg (echilibrat cu plata misiunilor)
   const ECON = Object.assign({ balance: 10000, missions: 0, hours: 0, nm: 0, earned: 0, history: [] }, store.get('geofsCopilotRO.econ', {}));
-  const saveEcon = () => store.set('geofsCopilotRO.econ', ECON);
+  const saveEcon = () => { store.set('geofsCopilotRO.econ', ECON); if (window.__gcrDirty) window.__gcrDirty(); };
   const FUEL = { kg: null, acId: null, flow: 0, lastT: 0, refuel: null, warned: {} };
   let MISSION = store.get('geofsCopilotRO.mission', null);  // misiunea activă
   let OFFERS = { apt: null, list: [], t: 0 };
@@ -3124,7 +3127,7 @@ function gcrMain() {
   const CAREER = Object.assign({ xp: null, ratings: [], ach: {}, lessons: {}, key: null, pilotId: null, rankPos: null }, store.get('geofsCopilotRO.career', {}));
   if (CAREER.xp == null) CAREER.xp = (ECON.missions || 0) * 40; // pornire pentru cei care aveau deja misiuni
   if (!CAREER.key) { const b = new Uint8Array(24); crypto.getRandomValues(b); CAREER.key = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join(''); }
-  const saveCareer = () => store.set('geofsCopilotRO.career', CAREER);
+  const saveCareer = () => { store.set('geofsCopilotRO.career', CAREER); if (window.__gcrDirty) window.__gcrDirty(); };
   saveCareer();
   function rankIdx(xp) { let i = 0; RANKS.forEach((r, k) => { if ((xp != null ? xp : CAREER.xp) >= r.xp) i = k; }); return i; }
   const rankName = (i) => L(RANKS[i].ro, RANKS[i].en);
@@ -3289,6 +3292,7 @@ function gcrMain() {
       saveCareer(); rec.online = true; saveLog();
       ui.toast(L(`🌐 Zbor publicat · locul #${res.rank_pos} în clasament`, `🌐 Flight published · #${res.rank_pos} on the leaderboard`), 6000);
       LB.t = 0; ui.renderCareer && ui.renderCareer();
+      cloudSave(true);
     } catch (e) { console.warn('[GeoFS Copilot] online', e.message); rec.onlineErr = e.message; saveLog(); }
   }
   const LB = { t: 0, list: [], err: null };
@@ -3297,6 +3301,80 @@ function gcrMain() {
     LB.t = Date.now();
     try { LB.list = await rpc('get_leaderboard', { p_sort: 'xp', p_limit: 10 }); LB.err = null; } catch (e) { LB.err = e.message; }
     ui.renderCareer && ui.renderCareer();
+  }
+
+  /* ---------------- Același pilot pe mai multe calculatoare: cod de pilot + progres în cloud ---------------- */
+  const CLOUD = { dirty: false, lastSave: 0, other: null, dismissed: store.get('geofsCopilotRO.cloudDismiss', null), busy: false };
+  window.__gcrDirty = () => { CLOUD.dirty = true; CAREER.stateT = Date.now(); store.set('geofsCopilotRO.career', CAREER); };
+  function buildState() {
+    return { v: 1, t: CAREER.stateT || Date.now(), xp: CAREER.xp, ratings: CAREER.ratings, ach: CAREER.ach, lessons: CAREER.lessons,
+      econ: { balance: Math.round(ECON.balance), missions: ECON.missions, hours: +ECON.hours.toFixed(3), nm: Math.round(ECON.nm), earned: Math.round(ECON.earned) },
+      history: ECON.history.slice(0, 10) };
+  }
+  /** Combină două progrese fără să dubleze nimic: maxim pentru numere, reuniune pentru liste. */
+  function mergeStates(...list) {
+    const out = { v: 1, t: Date.now(), xp: 0, ratings: [], ach: {}, lessons: {}, econ: { balance: 0, missions: 0, hours: 0, nm: 0, earned: 0 }, history: [] };
+    list.filter(Boolean).forEach((st) => {
+      out.xp = Math.max(out.xp, st.xp || 0);
+      (st.ratings || []).forEach((r) => { if (!out.ratings.includes(r)) out.ratings.push(r); });
+      Object.entries(st.ach || {}).forEach(([k, v]) => { out.ach[k] = out.ach[k] ? Math.min(out.ach[k], v) : v; });
+      Object.entries(st.lessons || {}).forEach(([k, v]) => { out.lessons[k] = out.lessons[k] ? Math.min(out.lessons[k], v) : v; });
+      Object.keys(out.econ).forEach((k) => { out.econ[k] = Math.max(out.econ[k], (st.econ && st.econ[k]) || 0); });
+      out.history = out.history.concat(st.history || []);
+    });
+    out.history = out.history.sort((a, b) => b.t - a.t).filter((h, i, arr) => i === 0 || h.t !== arr[i - 1].t).slice(0, 25);
+    return out;
+  }
+  function applyState(st) {
+    if (!st) return;
+    CAREER.xp = st.xp || 0; CAREER.ratings = st.ratings || []; CAREER.ach = st.ach || {}; CAREER.lessons = st.lessons || {};
+    if (st.econ) Object.assign(ECON, st.econ);
+    if (st.history && st.history.length) ECON.history = st.history;
+    CAREER.stateT = st.t || Date.now();
+    store.set('geofsCopilotRO.career', CAREER); store.set('geofsCopilotRO.econ', ECON);
+    ui.renderCareer && ui.renderCareer(); ui.renderMissions && ui.renderMissions();
+  }
+  const geofsId = () => { const u = geofs.userRecord || {}; return u.id ? String(u.id) : ''; };
+  async function cloudSave(force) {
+    if (!settings.onlineSync || CLOUD.busy) return;
+    if (!force && (!CLOUD.dirty || Date.now() - CLOUD.lastSave < 60000)) return;
+    CLOUD.busy = true;
+    try {
+      const res = await rpc('save_state', { p_key: CAREER.key, p_callsign: myCallsign(), p_geofs_id: geofsId(), p_state: buildState() });
+      CLOUD.dirty = false; CLOUD.lastSave = Date.now(); CAREER.pilotId = res.pilot_id || CAREER.pilotId;
+      const o = res.other_profile;
+      CLOUD.other = o && !(CLOUD.dismissed && CLOUD.dismissed === o.callsign + o.flights) ? o : null;
+      if (CLOUD.other && !CLOUD.toldOther) {
+        CLOUD.toldOther = true;
+        ui.toast(L(`Contul tău GeoFS are deja un alt profil de pilot (${o.callsign}, ${o.xp} XP, ${o.flights} zboruri) pe alt calculator. Unește-le din tab-ul Carieră cu codul de pilot.`,
+          `Your GeoFS account already has another pilot profile (${o.callsign}, ${o.xp} XP, ${o.flights} flights) on another computer. Merge them in the Career tab with your pilot code.`), 12000);
+      }
+      ui.renderCareer && ui.renderCareer();
+    } catch (e) { console.warn('[GeoFS Copilot] cloud save', e.message); } finally { CLOUD.busy = false; }
+  }
+  async function cloudInit() {
+    if (!settings.onlineSync) return;
+    try {
+      const res = await rpc('get_state', { p_key: CAREER.key });
+      if (res && res.state && (res.state.t || 0) > (CAREER.stateT || 0)) { applyState(res.state); ui.toast(L('Progresul tău a fost încărcat din cloud ☁️', 'Your progress was loaded from the cloud ☁️'), 5000); }
+      if (res && res.pilot_id) { CAREER.pilotId = res.pilot_id; CAREER.rankPos = res.rank_pos; }
+    } catch (e) { /* pilot nou sau server indisponibil */ }
+    cloudSave(true);
+  }
+  async function linkWithCode(code) {
+    const clean = String(code || '').toLowerCase().replace(/[^0-9a-f]/g, '');
+    if (clean.length < 24) { ui.toast(L('Codul nu e valid – copiază-l întreg din tab-ul Carieră de pe celălalt calculator.', 'Invalid code – copy it in full from the Career tab on the other computer.')); return; }
+    if (clean === CAREER.key) { ui.toast(L('Acesta e chiar codul acestui calculator.', 'That is this computer\'s own code.')); return; }
+    try {
+      const local = buildState();
+      const res = await rpc('link_device', { p_key: CAREER.key, p_code: clean });
+      CAREER.key = clean; CAREER.pilotId = res.pilot_id; CAREER.rankPos = res.rank_pos;
+      applyState(mergeStates(local, res.state, res.merged_state, { xp: res.xp }));
+      CLOUD.other = null; CLOUD.dismissed = null; store.set('geofsCopilotRO.cloudDismiss', null);
+      await cloudSave(true);
+      LB.t = 0;
+      ui.toast(L(`✅ Calculatoare legate! Profil comun: ${res.callsign} · ${res.flights} zboruri · ${res.xp} XP.`, `✅ Computers linked! Shared profile: ${res.callsign} · ${res.flights} flights · ${res.xp} XP.`), 9000);
+    } catch (e) { ui.toast(L('Legarea a eșuat: ', 'Linking failed: ') + (e.message === 'code not found' ? L('codul nu există pe server (celălalt calculator trebuie să fi publicat măcar un zbor).', 'code not found on the server (the other computer must have published at least one flight).') : e.message), 9000); }
   }
 
   /* ---------------- Urgențe și defecțiuni ---------------- */
@@ -3542,6 +3620,22 @@ function gcrMain() {
       box.append(el('div', { class: 'gcr-row', style: 'margin-top:8px;justify-content:space-between' }, el('b', {}, '🌐 ' + L('Clasament online', 'Online leaderboard')),
         el('a', { href: ONLINE.site, target: '_blank', rel: 'noopener', class: 'gcr-link' }, L('vezi site-ul →', 'open the website →'))), lb,
         CAREER.rankPos ? el('div', { class: 'gcr-muted' }, L(`Locul tău: #${CAREER.rankPos}`, `Your position: #${CAREER.rankPos}`)) : null);
+      // mai multe calculatoare
+      const dev = el('div', { class: 'gcr-fuel', style: 'margin-top:10px' });
+      dev.append(el('b', {}, '💻 ' + L('Joci pe mai multe calculatoare?', 'Playing on several computers?')),
+        el('div', { class: 'gcr-muted', style: 'margin:3px 0 6px' }, L('Copiază codul de pilot de aici și lipește-l pe celălalt calculator (tab-ul Carieră). Profilurile se unesc, iar banii, rangul, licențele și realizările se sincronizează. Codul e secret, ca o parolă – nu-l da nimănui.', 'Copy your pilot code from here and paste it on the other computer (Career tab). The profiles merge, and money, rank, type ratings and achievements stay in sync. The code is secret, like a password – do not share it.')));
+      if (CLOUD.other) dev.append(el('div', { style: 'color:#ffd54f;margin-bottom:6px' }, L(`⚠ Contul tău GeoFS are și profilul „${CLOUD.other.callsign}” (${CLOUD.other.xp} XP, ${CLOUD.other.flights} zboruri) pe alt calculator. Lipește aici codul de pe acel calculator ca să le unești.`, `⚠ Your GeoFS account also has the profile “${CLOUD.other.callsign}” (${CLOUD.other.xp} XP, ${CLOUD.other.flights} flights) on another computer. Paste that computer's code here to merge them.`),
+        ' ', el('a', { href: '#', class: 'gcr-link', onclick: (ev) => { ev.preventDefault(); CLOUD.dismissed = CLOUD.other.callsign + CLOUD.other.flights; store.set('geofsCopilotRO.cloudDismiss', CLOUD.dismissed); CLOUD.other = null; ui.renderCareer(); } }, L('(ignoră)', '(dismiss)'))));
+      const codeShown = CAREER.key.match(/.{1,6}/g).join('-');
+      const codeEl = el('code', { class: 'gcr-code' }, '••••••-••••••-••••••-••••••-••••••-••••••-••••••-••••••');
+      let shown = false;
+      dev.append(el('div', { class: 'gcr-row' }, el('span', {}, L('Codul tău:', 'Your code:')), codeEl),
+        el('div', { class: 'gcr-row' },
+          el('button', { class: 'gcr-btn sm', onclick: () => { shown = !shown; codeEl.textContent = shown ? codeShown : '••••••-••••••-••••••-••••••-••••••-••••••-••••••-••••••'; } }, L('Arată / ascunde', 'Show / hide')),
+          el('button', { class: 'gcr-btn sm', onclick: () => { (navigator.clipboard ? navigator.clipboard.writeText(codeShown) : Promise.reject()).then(() => ui.toast(L('Cod copiat ✓', 'Code copied ✓'))).catch(() => { shown = true; codeEl.textContent = codeShown; ui.toast(L('Copiază manual codul afișat.', 'Copy the code shown manually.')); }); } }, L('Copiază', 'Copy'))));
+      const inp = el('input', { placeholder: L('Lipește codul de pe celălalt calculator', 'Paste the code from your other computer'), style: 'flex:1;min-width:0' });
+      dev.append(el('div', { class: 'gcr-row' }, inp, el('button', { class: 'gcr-btn sm ok', onclick: () => linkWithCode(inp.value) }, L('Leagă', 'Link'))));
+      box.append(dev);
       if (settings.onlineSync) loadLeaderboard();
     };
     ui.renderCareer();

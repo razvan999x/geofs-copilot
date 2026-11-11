@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.1
+- Same pilot on several computers: a pilot code (Career tab) links computers and merges their profiles and flights. Progress (money, rank, type ratings, achievements, lessons) is saved to the cloud and loaded on every linked computer.
+- Automatic notice when the same GeoFS account already has another pilot profile.
+
 ## 1.7.0
 - Career: XP, 7 ranks, aircraft classes unlocked by rank or by a purchased type rating, and a pay bonus per rank.
 - Random failures and emergencies (engine, gear, bird strike, fuel leak, medical, autopilot) with a checklist card, divert-to-nearest and MAYDAY. Missions still pay when you divert.

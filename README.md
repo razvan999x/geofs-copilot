@@ -76,6 +76,7 @@ Open the **Missions** tab in the panel.
 - **Training** tab: five guided lessons. Each one sets you up on the runway or on final, and the steps appear in the instruction box. You can also trigger a failure on purpose to practise.
 - **Logbook** tab: every flight, with distance, time, fuel, landing and pay. Export KML (Google Earth), GPX or CSV.
 - **Website:** https://razvan999x.github.io/geofs-copilot/ has the all-time leaderboard (by XP, earnings, hours, missions, butter landings or distance), the best landings of the last 30 days, recent flights and pilot profiles.
+- **Several computers:** in the Career tab, copy your *pilot code* and paste it on your other computer. The two profiles merge into one, with all flights, and your money, rank, type ratings, achievements and lessons stay in sync through the cloud. If you play on a new computer with the same GeoFS account, the plugin notices and offers to merge. The code is secret, like a password.
 - **Privacy:** only your GeoFS callsign and your flight statistics are published. Each browser gets a random secret key, so nobody else can post in your name. The server checks every flight for plausibility and computes XP itself. To stop publishing, untick *Publish my flights* in Settings.
 
 ## Air traffic control (ATC)
