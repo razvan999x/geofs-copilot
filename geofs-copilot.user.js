@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.7.1
+// @version      1.7.2
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -100,6 +100,7 @@ function gcrMain() {
     bankMax: 25,
     lang: 'en',           // 'en' sau 'ro'
     atcRole: 'pilot',     // 'pilot' sau 'ctrl'
+    atcAnnounce: 'once',  // anunț turn în chat: once | never
     fuelOn: true,         // combustibil simulat
     onlineSync: true,     // publică zborurile în clasamentul online
     failures: 'rare',     // defecțiuni aleatorii: off | rare | normal
@@ -122,7 +123,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.7.1';
+  const VERSION = '1.7.2';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -2306,7 +2307,7 @@ function gcrMain() {
       let tagged = false;
       try {
         if (settings.cpBeacon && !COP.beaconOff && typeof url === 'string' && url.indexOf('/update') >= 0 && data && data.st && typeof data.st === 'object') {
-          data.st.cp = `${VERSION}|${rankIdx()}|${CAREER.xp}`; tagged = true;
+          data.st.cp = `${VERSION}|${rankIdx()}|${CAREER.xp}` + (settings.atcRole === 'ctrl' && settings.atcStation ? `|ATC:${settings.atcStation}:${settings.atcRwy || ''}` : ''); tagged = true;
         }
       } catch (e) { /* */ }
       if (!tagged) return orig.apply(this, arguments);
@@ -2332,7 +2333,7 @@ function gcrMain() {
   }
   function isCopilot(u, cs) {
     const lu = u && u.lastUpdate;
-    if (lu && lu.st && lu.st.cp) { markCopilot(cs, 'beacon', String(lu.st.cp), u.id); return true; }
+    if (lu && lu.st && lu.st.cp) { markCopilot(cs, 'beacon', String(lu.st.cp), u.id); towerFromBeacon(cs, lu.st.cp); return true; }
     const k = u && COP.byId[u.id];
     if (k && Date.now() - k.t < 10 * 60000) return true;
     if (genericCs(cs)) return false;
@@ -2351,7 +2352,7 @@ function gcrMain() {
         users.forEach((c) => {
           if (!c || c.id === multiplayer.myId) return;
           if (c.st) seenField = true;
-          if (c.st && c.st.cp) { n++; markCopilot(c.cs, 'beacon', String(c.st.cp), c.id); }
+          if (c.st && c.st.cp) { n++; markCopilot(c.cs, 'beacon', String(c.st.cp), c.id); towerFromBeacon(c.cs, c.st.cp); }
         });
         COP.global = { t: Date.now(), count: n, total: users.length, ok: seenField };
         updateCopBadge();
@@ -2369,6 +2370,14 @@ function gcrMain() {
     ui.copBadge.title = (g != null
       ? L(`Utilizatori GeoFS Copilot online acum: ${others + me} (tu inclus) · în zona ta: ${near}`, `GeoFS Copilot users online now: ${others + me} (including you) · near you: ${near}`)
       : L(`Utilizatori GeoFS Copilot cunoscuți: ${others + me} (tu inclus) · în zona ta: ${near}. Numărul global apare dacă serverul GeoFS îl transmite.`, `Known GeoFS Copilot users: ${others + me} (including you) · near you: ${near}. The global count appears if the GeoFS server provides it.`));
+  }
+
+  /** Un controlor își anunță turnul prin semnalul ascuns (…|ATC:LROP:26R), fără mesaje în chat. */
+  function towerFromBeacon(cs, cp) {
+    const part = String(cp).split('|').find((x) => x.startsWith('ATC:'));
+    if (!part || !cs || cs === myCallsign()) return;
+    const [, icao, rwy] = part.split(':');
+    if (icao) ATC.stations[icao.toUpperCase()] = { cs, t: Date.now(), rwy: rwy || '' };
   }
 
   function getTraffic() {
@@ -2546,10 +2555,13 @@ function gcrMain() {
   /** La 10 Hz: coada de chat, anunțul controlorului, resetări între etape. */
   function atcTick() {
     atcFlushQueue();
-    if (settings.atcRole === 'ctrl' && settings.atcStation && Date.now() - ATC.lastBeat > 60000) {
-      ATC.lastBeat = Date.now();
-      const a = DB.info.get(settings.atcStation);
-      atcSend(`${a ? (a.city || a.name).slice(0, 18) : settings.atcStation} Tower online${settings.atcRwy ? ', rwy ' + settings.atcRwy : ''} #ATC ${settings.atcStation}`);
+    // anunț în chat doar o dată, la deschiderea turnului (prezența se transmite apoi prin semnalul ascuns)
+    if (settings.atcRole === 'ctrl' && settings.atcStation && ATC.announced !== settings.atcStation) {
+      ATC.announced = settings.atcStation;
+      if (settings.atcAnnounce !== 'never') {
+        const a = DB.info.get(settings.atcStation);
+        atcSend(`${a ? (a.city || a.name).slice(0, 18) : settings.atcStation} Tower online${settings.atcRwy ? ', rwy ' + settings.atcRwy : ''} #ATC ${settings.atcStation}`);
+      }
     }
     if (settings.atcRole !== 'ctrl') {
       atcWaitTick();
@@ -2610,15 +2622,19 @@ function gcrMain() {
       const apt = DB.airports.has(code) ? code : (searchAirports(q, ...sim.lla().slice(0, 2))[0] || {}).apt;
       if (!apt) { ui.toast(L('Nu am găsit aeroportul.', 'Airport not found.')); return; }
       if (settings.atcStation && settings.atcStation !== apt) atcSend(`Tower closed #ATCOFF ${settings.atcStation}`);
-      settings.atcStation = apt; settings.atcRwy = ''; saveSettings(); stIn.value = apt; fillRw(); ATC.lastBeat = 0;
+      settings.atcStation = apt; settings.atcRwy = ''; saveSettings(); stIn.value = apt; fillRw(); ATC.announced = null;
       openAtcWindow(); ui.renderAtc();
     };
     ctrlBox.append(
       el('div', { class: 'gcr-row' }, stIn, el('button', { class: 'gcr-btn pri sm', onclick: setStation }, L('Preia turnul', 'Open tower'))),
+      (() => { const an = el('select', {}, el('option', { value: 'once' }, L('o singură dată, la deschidere', 'once, when opening')), el('option', { value: 'never' }, L('niciodată', 'never')));
+        an.value = settings.atcAnnounce === 'never' ? 'never' : 'once'; an.addEventListener('change', () => { settings.atcAnnounce = an.value; saveSettings(); });
+        return el('div', { class: 'gcr-row' }, el('label', { style: 'min-width:0' }, L('Anunț turn în chat', 'Announce tower in chat')), an); })(),
+      el('div', { class: 'gcr-muted', style: 'margin:-2px 0 4px' }, L('Piloții cu plugin văd turnul automat, fără mesaje în chat.', 'Pilots with the plugin see your tower automatically, without chat messages.')),
       el('div', { class: 'gcr-row' }, el('label', {}, L('Pista activă', 'Active runway')), rwSel,
         el('button', { class: 'gcr-btn sm', onclick: () => openAtcWindow() }, L('Deschide radarul', 'Open radar')),
-        el('button', { class: 'gcr-btn sm warn', onclick: () => { if (settings.atcStation) atcSend(`Tower closed #ATCOFF ${settings.atcStation}`); settings.atcStation = ''; saveSettings(); closeAtcWindow(); ui.renderAtc(); } }, L('Închide turnul', 'Close tower'))));
-    role.addEventListener('change', () => { settings.atcRole = role.value; saveSettings(); if (role.value !== 'ctrl') { if (settings.atcStation) atcSend(`Tower closed #ATCOFF ${settings.atcStation}`); closeAtcWindow(); } ui.renderAtc(); });
+        el('button', { class: 'gcr-btn sm warn', onclick: () => { if (settings.atcStation && settings.atcAnnounce !== 'never') atcSend(`Tower closed #ATCOFF ${settings.atcStation}`); settings.atcStation = ''; saveSettings(); closeAtcWindow(); ui.renderAtc(); } }, L('Închide turnul', 'Close tower'))));
+    role.addEventListener('change', () => { settings.atcRole = role.value; saveSettings(); if (role.value !== 'ctrl') { if (settings.atcStation && settings.atcAnnounce !== 'never') atcSend(`Tower closed #ATCOFF ${settings.atcStation}`); closeAtcWindow(); } ui.renderAtc(); });
     p.append(el('div', { class: 'gcr-row' }, el('label', {}, L('Rol', 'Role')), role), status, pilotBox, ctrlBox,
       el('b', { style: 'display:block;margin-top:8px' }, L('Mesaje ATC', 'ATC messages')), logBox,
       el('div', { class: 'gcr-muted', style: 'margin-top:6px' }, L('Mesajele merg prin chatul GeoFS (trebuie să fii logat în GeoFS). Shift+Y = accept, Shift+U = refuz.', 'Messages go through the GeoFS chat (you must be signed in to GeoFS). Shift+Y = accept, Shift+U = refuse.')));

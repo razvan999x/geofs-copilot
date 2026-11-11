@@ -88,7 +88,7 @@ ATC messages travel through the **GeoFS chat**, so both the controller and the p
 **Being a controller**
 
 1. Open the panel (**Shift+N**) → **ATC** tab → Role: *Air traffic controller*.
-2. Type the airport (city or ICAO code), press **Open tower** and choose the active runway. The plugin announces "Tower online" in the chat every minute.
+2. Type the airport (city or ICAO code), press **Open tower** and choose the active runway. Pilots with the plugin see your tower automatically through the hidden signal, so there is no chat spam. A single "Tower online" message is posted when you open the tower, and you can switch even that off.
 3. The radar shows every aircraft around, including pilots without the plugin and GeoFS AI traffic, labelled with callsign, altitude and speed. Pilot requests (takeoff/landing) are highlighted in red.
 4. Select an aircraft on the radar or in the list and send an instruction: **Line up**, **Takeoff**, **Landing**, **Go around**, **Hold**, **Resume nav**, sequence number, **heading / altitude / speed**, or free text.
 
