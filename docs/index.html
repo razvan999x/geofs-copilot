@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta property="og:title" content="GeoFS Copilot">
+<meta property="og:description" content="Free extension for the GeoFS flight simulator: leaderboard, events, daily challenge, landing contest, airlines and more.">
+<meta property="og:image" content="https://razvan999x.github.io/geofs-copilot/promo.jpg">
+<meta property="og:url" content="https://razvan999x.github.io/geofs-copilot/">
+<meta name="twitter:card" content="summary_large_image">
 <title>GeoFS Copilot – leaderboard, pilots & install</title>
 <meta name="description" content="GeoFS Copilot: a free plugin for the GeoFS flight simulator with automatic takeoff, navigation by city name, missions, fuel, ATC and an online pilot leaderboard.">
 <style>
@@ -22,6 +27,7 @@
   .hero h1{font-size:42px;line-height:1.08;margin:0 0 12px;letter-spacing:-.5px}
   .hero h1 em{font-style:normal;background:linear-gradient(90deg,var(--accent),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
   .hero p{color:#b9c6da;font-size:17px;margin:0 0 20px}
+  .hero .promo{width:100%;height:auto;max-width:460px;justify-self:center;border-radius:18px;border:1px solid var(--line);box-shadow:0 18px 60px rgba(0,120,255,.25),0 0 0 1px rgba(64,196,255,.15)}
   .btn{display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:10px;font-weight:700;border:1px solid var(--line);background:var(--panel2);color:var(--text);cursor:pointer}
   .btn.pri{background:linear-gradient(135deg,#8e24aa,#c51162);border-color:#d05ce3}
   .btn.drag{cursor:grab;border-style:dashed;border-color:var(--accent)}
@@ -157,8 +163,9 @@ function flightTable(rows, best) {
 
 async function home() {
   app.innerHTML = `<div class="hero"><div><h1>${t('h1')}</h1><p>${t('lead')}</p>
-    <a class="btn pri" href="#/install">✈ ${t('install')}</a> <a class="btn" href="#/leaderboard">🏆 ${t('seeLb')}</a></div>
-    <div class="stats" id="stats">${[0,1,2,3,4,5].map(() => '<div class="stat"><b>…</b><span>&nbsp;</span></div>').join('')}</div></div>
+    <a class="btn pri" href="#/install">✈ ${t('install')}</a> <a class="btn" href="#/leaderboard">🏆 ${t('seeLb')}</a>
+    <div class="stats" id="stats" style="margin-top:22px">${[0,1,2,3,4,5].map(() => '<div class="stat"><b>…</b><span>&nbsp;</span></div>').join('')}</div></div>
+    <img class="promo" src="promo.jpg" width="1200" height="1200" alt="GeoFS Copilot – extension for the GeoFS flight simulator: leaderboard, events, daily challenge, contest, airlines, flights"></div>
     <section id="hev"></section>
     <section class="grid2"><div><h2>🏆 ${t('daily')} <a class="muted" style="font-size:14px" href="#/daily">→</a></h2><div class="card" id="hdaily"><div class="empty">${t('loading')}</div></div></div>
       <div><h2>🧈 ${t('contest')} <a class="muted" style="font-size:14px" href="#/contest">→</a></h2><div class="card" id="hcontest"><div class="empty">${t('loading')}</div></div></div></section>
