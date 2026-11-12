@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.9.0
+- **Events:** the administrator creates group flights and challenges (title, description, start time, duration, departure → arrival, suggested aircraft, XP and/or money bonus) and can announce them to everyone.
+- Players see upcoming events in the Missions tab, can join, get a reminder 15 minutes before and when it starts, and can jump to the departure runway with the route ready.
+- Taking part: take off no earlier than 30 minutes before the start and land at the destination during the event. Players who finish get the bonus and appear in the event results.
+- Website: Events page with upcoming and past events, participants and results.
+
 ## 1.8.3
 - Update notice: the plugin checks `version.json` on GitHub at start and every 3 hours. When a newer version is out, a card shows what's new and how to update (bookmark: reload; Tampermonkey: *Update now*). A ⬆️ badge also appears in the panel header.
 

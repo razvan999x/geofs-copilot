@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.8.3
+// @version      1.9.0
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -123,7 +123,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.8.3';
+  const VERSION = '1.9.0';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -1356,6 +1356,8 @@ function gcrMain() {
     setTimeout(() => { try { cloudInit(); } catch (e) { /* */ } }, 4000);
     setTimeout(() => { adminCheck(); pollNotices(); }, 7000);
     setTimeout(() => { checkUpdate(); }, 15000);
+    setInterval(() => { try { eventsTick(); } catch (e) { /* */ } }, 30000);
+    setTimeout(() => { try { eventsTick(); } catch (e) { /* */ } }, 9000);
     setInterval(() => { checkUpdate(); }, 3 * 3600000);
     setInterval(() => { try { adminTick(); } catch (e) { /* */ } }, 2000);
     setInterval(() => { pollNotices(); }, 60000);
@@ -1911,6 +1913,7 @@ function gcrMain() {
       out.push([`${t.icon} ${L(t.ro, t.en)}${MISSION.points && nextPoint() ? '' : ' → ' + aptName(MISSION.to)} · ${load} · $${MISSION.pay.toLocaleString('en-US')} · ${timing}`, 'i']);
       try { const pl = pointLine(); if (pl) out.unshift(pl); } catch (e) { /* */ }
     }
+    try { const evl = eventLine(); if (evl) out.push(evl); } catch (e) { /* */ }
     if (settings.fuelOn && FUEL.kg != null) {
       const pct = Math.round((FUEL.pct || 0) * 100);
       let txt = `⛽ ${Math.round(FUEL.kg).toLocaleString('en-US')} kg (${pct}%)`;
@@ -1933,7 +1936,7 @@ function gcrMain() {
   function guideLines() {
     const les = lessonLines();
     const core = les.length ? les.concat(LES.id === 'takeoff' || LES.id === 'handling' || LES.id === 'engine_out' ? [] : guideLinesCore().filter((x) => x[1] !== 'm')) : guideLinesCore();
-    if (!les.length && !AP.rwy && !MISSION && sim.onGround()) return core; // parcat fără plan: fără casetă // parcat fără plan: fără casetă
+    if (!les.length && !AP.rwy && !MISSION && sim.onGround()) return core; // parcat fără plan: fără casetă
     const extra = infoLines();
     return core.length || extra.length ? core.concat(extra) : core;
   }
@@ -3069,8 +3072,8 @@ function gcrMain() {
     const mul = el('select', {}, ...[['0.5', '×0.5'], ['1', L('×1 realist', '×1 realistic')], ['2', '×2'], ['3', '×3']].map(([v, t]) => el('option', { value: v }, t)));
     mul.value = String(settings.fuelBurnMul || 1);
     mul.addEventListener('change', () => { settings.fuelBurnMul = +mul.value; saveSettings(); OFFERS.t = 0; });
-    const dailyBox = el('div');
-    p.append(dailyBox, top, el('b', { style: 'display:block;margin-top:6px' }, L('Combustibil', 'Fuel')), fuelBox,
+    const dailyBox = el('div'), eventsBox = el('div');
+    p.append(dailyBox, eventsBox, top, el('b', { style: 'display:block;margin-top:6px' }, L('Combustibil', 'Fuel')), fuelBox,
       el('div', { class: 'gcr-row' }, el('label', { style: 'min-width:0' }, fuelOn, ' ', L('Simulează combustibilul (motoarele se opresc la 0)', 'Simulate fuel (engines stop at 0)')), el('span', { class: 'gcr-muted' }, L('consum', 'burn')), mul),
       active,
       offersHead,
@@ -3095,6 +3098,7 @@ function gcrMain() {
     };
     ui.renderMissions = () => {
       try { renderDailyBox(dailyBox); } catch (e) { console.warn('[GeoFS Copilot] daily box', e); }
+      try { renderEventsBox(eventsBox); } catch (e) { console.warn('[GeoFS Copilot] events box', e); }
       top.innerHTML = '';
       top.append(el('div', {}, '💰 ', el('b', { style: 'font-size:15px;color:#4cff8f' }, '$' + Math.round(ECON.balance).toLocaleString('en-US')),
         el('span', { class: 'gcr-muted' }, ` · ${ECON.missions} ${L('misiuni', 'missions')} · ${ECON.hours.toFixed(1)} h · ${Math.round(ECON.nm)} NM`)));
@@ -3360,6 +3364,7 @@ function gcrMain() {
       CAREER.pilotId = res.pilot_id; CAREER.rankPos = res.rank_pos;
       if (res.xp != null && res.xp > CAREER.xp) CAREER.xp = res.xp; // serverul e sursa de adevăr
       try { streakOnResult(res); } catch (e) { /* */ }
+      try { eventOnResult(res); } catch (e) { /* */ }
       saveCareer(); rec.online = true; saveLog();
       ui.toast(L(`🌐 Zbor publicat · locul #${res.rank_pos} în clasament`, `🌐 Flight published · #${res.rank_pos} on the leaderboard`), 6000);
       LB.t = 0; ui.renderCareer && ui.renderCareer();
@@ -4346,11 +4351,12 @@ function gcrMain() {
       msg,
       el('div', { class: 'gcr-row' }, el('button', { class: 'gcr-btn sm ok', onclick: send }, '📢 ' + L('Trimite', 'Send'))),
       el('b', { style: 'display:block;margin-top:10px' }, L('Mesaje trimise', 'Sent messages')), sentBox,
+      adminEventsSection(),
       el('b', { style: 'display:block;margin-top:12px' }, '🔑 ' + L('Parola de administrator', 'Administrator password')),
       el('div', { class: 'gcr-muted' }, L('Cu parola te poți autentifica ca admin pe orice calculator sau browser: Setări → „Autentificare administrator” (jos). Minim 10 caractere.', 'With the password you can log in as admin on any computer or browser: Settings → “Administrator login” (at the bottom). At least 10 characters.')),
       el('div', { class: 'gcr-row' }, pw1, pw2, el('button', { class: 'gcr-btn sm ok', onclick: setPw }, L('Salvează', 'Save'))),
       el('div', { class: 'gcr-row' }, el('button', { class: 'gcr-btn sm warn', onclick: adminLogout }, L('Ieși din admin pe acest calculator', 'Log out of admin on this computer'))));
-    ui.renderAdmin = () => { loadPilots(); loadSent(); };
+    ui.renderAdmin = () => { loadPilots(); loadSent(); loadEvents(true); };
     render();
   }
 
@@ -4390,6 +4396,143 @@ function gcrMain() {
         el('button', { class: 'gcr-btn sm', onclick: close }, L('Mai târziu', 'Later'))));
     ['mousedown', 'pointerdown', 'wheel', 'keydown'].forEach((t) => box.addEventListener(t, (e) => e.stopPropagation()));
     document.body.append(box);
+  }
+
+  /* ---------------- Evenimente (create de administrator) ---------------- */
+  const EVENTS = { t: 0, data: null, busy: false, rem: store.get('geofsCopilotRO.evRem', {}) };
+  async function loadEvents(force) {
+    if (!settings.onlineSync || EVENTS.busy) return;
+    if (!force && Date.now() - EVENTS.t < 120000) return;
+    EVENTS.busy = true; EVENTS.t = Date.now();
+    try { const d = await rpc('get_events', { p_key: CAREER.key }); EVENTS.data = d && Array.isArray(d.upcoming) ? d : null; } catch (e) { /* */ } finally { EVENTS.busy = false; }
+    ui.tab === 'mis' && ui.renderMissions && ui.renderMissions();
+    ui.tab === 'adm' && ui.renderAdminEvents && ui.renderAdminEvents();
+  }
+  const evReward = (e) => [e.bonus_xp ? `+${e.bonus_xp} XP` : null, e.bonus_money ? '+' + money(e.bonus_money) : null].filter(Boolean).join(' · ');
+  const evStart = (e) => Date.parse(e.starts_at), evEnd = (e) => Date.parse(e.ends_at);
+  const evLive = (e) => Date.now() >= evStart(e) && Date.now() < evEnd(e);
+  function evWhen(e) {
+    const ms = evStart(e) - Date.now();
+    if (evLive(e)) return L(`🔴 ÎN DESFĂȘURARE · până la ${new Date(evEnd(e)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, `🔴 LIVE NOW · until ${new Date(evEnd(e)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+    const d = Math.floor(ms / 86400000), h = Math.floor((ms % 86400000) / 3600000), m = Math.max(1, Math.round((ms % 3600000) / 60000));
+    const left = d ? `${d}${L('z', 'd')} ${h}h` : h ? `${h}h ${m}m` : `${m} min`;
+    return `${new Date(evStart(e)).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })} · ${L('peste', 'in')} ${left}`;
+  }
+  function eventsTick() {
+    loadEvents(false);
+    const up = EVENTS.data ? EVENTS.data.upcoming : [];
+    up.filter((e) => e.joined && !e.done).forEach((e) => {
+      const r = EVENTS.rem[e.id] || (EVENTS.rem[e.id] = {}), now = Date.now(), route = `${e.dep || ''}${e.arr ? ' → ' + e.arr : ''}`;
+      if (!r.r15 && now >= evStart(e) - 15 * 60000 && now < evStart(e)) {
+        r.r15 = 1; NOTICES.queue.push({ at: new Date().toISOString(), personal: true, message: L(`📅 „${e.title}” începe în ${Math.max(1, Math.round((evStart(e) - now) / 60000))} minute! ${route}\nIntră în tab-ul Misiuni → „Mergi la plecare”.`, `📅 “${e.title}” starts in ${Math.max(1, Math.round((evStart(e) - now) / 60000))} minutes! ${route}\nGo to the Missions tab → “Go to departure”.`) });
+      }
+      if (!r.r0 && evLive(e)) {
+        r.r0 = 1; r.r15 = 1; NOTICES.queue.push({ at: new Date().toISOString(), personal: true, message: L(`🔴 „${e.title}” a început! ${route}${evReward(e) ? ` · ${evReward(e)} la final` : ''}`, `🔴 “${e.title}” has started! ${route}${evReward(e) ? ` · ${evReward(e)} when you finish` : ''}`) });
+      }
+    });
+    store.set('geofsCopilotRO.evRem', EVENTS.rem);
+    showNextNotice();
+  }
+  async function rsvp(e, on) {
+    try { await rpc('rsvp_event', { p_key: CAREER.key, p_id: e.id, p_on: on, p_callsign: myCallsign() }); ui.toast(on ? L(`✓ Te-ai înscris la „${e.title}”. Primești memento cu 15 minute înainte.`, `✓ You joined “${e.title}”. You'll get a reminder 15 minutes before.`) : L('Nu mai participi.', 'You left the event.'), 6000); }
+    catch (err) { ui.toast(err.message); }
+    loadEvents(true);
+  }
+  function eventGoDep(e) {
+    if (!DB.loaded) { ui.toast(L('Baza de aeroporturi se încarcă…', 'Airport database is loading…')); return; }
+    const r = bestRunway(e.dep); if (!r) { ui.toast(L('Nu găsesc aeroportul de plecare.', 'Departure airport not found.')); return; }
+    if (MISSION && MISSION.state === 'flying') { ui.toast(L('Termină sau anulează misiunea înainte.', 'Finish or cancel your mission first.')); return; }
+    if (geofs.autopilot.on) geofs.autopilot.turnOff(); disengage(true);
+    positionOnRunway(r, () => { if (e.arr) setSingleDestination(e.arr); });
+  }
+  function renderEventsBox(box) {
+    box.innerHTML = '';
+    if (!settings.onlineSync) return;
+    loadEvents(false);
+    const up = EVENTS.data ? EVENTS.data.upcoming.slice(0, 3) : [];
+    if (!up.length) return;
+    box.append(el('b', { style: 'display:block;margin:8px 0 2px' }, '📅 ' + L('Evenimente', 'Events')));
+    up.forEach((e) => {
+      const desc = el('div', { class: 'gcr-muted', style: 'white-space:pre-wrap;margin:3px 0' }); desc.textContent = e.description || '';
+      const t = el('div', { style: 'font-size:14px;font-weight:700' }); t.textContent = e.title;
+      box.append(el('div', { class: 'gcr-destcard', style: `margin-top:4px;border-color:${evLive(e) ? '#ff5252' : '#40c4ff'}` },
+        el('div', { class: 'gcr-muted', style: 'font-size:11px' }, evWhen(e)), t,
+        el('div', {}, [e.dep && e.arr ? `${e.dep} → ${e.arr}` : e.arr ? `→ ${e.arr}` : e.dep ? `${L('din', 'from')} ${e.dep}` : L('rută liberă', 'free route'),
+          e.aircraft ? `✈ ${e.aircraft}` : null, evReward(e) || null, `👥 ${e.going}`].filter(Boolean).join(' · ')),
+        e.description ? desc : null,
+        e.done ? el('div', { style: 'color:#4cff8f' }, '✓ ' + L('Ai terminat evenimentul!', 'You completed this event!'))
+          : el('div', { class: 'gcr-row' },
+            el('button', { class: 'gcr-btn sm' + (e.joined ? '' : ' ok'), onclick: () => rsvp(e, !e.joined) }, e.joined ? '✓ ' + L('Înscris (renunță)', 'Joined (leave)') : L('Mă înscriu', 'Join')),
+            e.dep ? el('button', { class: 'gcr-btn sm', onclick: () => eventGoDep(e) }, '🛫 ' + L('Mergi la plecare', 'Go to departure')) : null,
+            e.arr ? el('button', { class: 'gcr-btn sm', onclick: () => setSingleDestination(e.arr) }, '🧭 ' + L('Traseu', 'Route')) : null,
+            el('a', { href: `${ONLINE.site}#/event/${e.id}`, target: '_blank', rel: 'noopener', class: 'gcr-link' }, L('detalii →', 'details →')))));
+    });
+  }
+  function eventLine() {
+    const e = EVENTS.data && EVENTS.data.upcoming.find((x) => x.joined && !x.done && evLive(x));
+    if (!e) return null;
+    const by = new Date(evEnd(e)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return [`📅 ${e.title}: ${e.arr ? L(`aterizează la ${e.arr} până la ${by}`, `land at ${e.arr} by ${by}`) : L(`zboară până la ${by}`, `fly until ${by}`)}`, 'i'];
+  }
+  function eventOnResult(res) {
+    if (!res || !res.event) return;
+    const ev = res.event;
+    const paid = store.get('geofsCopilotRO.evPaid', []);
+    if (ev.bonus_money > 0 && !paid.includes(ev.id)) { ECON.balance += ev.bonus_money; ECON.earned += ev.bonus_money; saveEcon(); paid.push(ev.id); store.set('geofsCopilotRO.evPaid', paid.slice(-50)); }
+    const rw = evReward(ev);
+    setTimeout(() => ui.toast(L(`📅 Eveniment terminat: „${ev.title}” · locul #${ev.pos} din ${ev.finished}${rw ? ' · ' + rw : ''} 🎉`, `📅 Event completed: “${ev.title}” · #${ev.pos} of ${ev.finished}${rw ? ' · ' + rw : ''} 🎉`), 9000), 9500);
+    loadEvents(true);
+  }
+  /** Secțiunea de evenimente din tab-ul Admin. */
+  function adminEventsSection() {
+    const wrap = el('div');
+    const inp = (ph, extra) => el('input', Object.assign({ placeholder: ph, style: 'flex:1;min-width:0' }, extra || {}));
+    const title = inp(L('Titlu (ex. Zbor de grup București → Viena)', 'Title (e.g. Group flight Bucharest → Vienna)'), { maxlength: 80 });
+    const when = inp('', { type: 'datetime-local' });
+    const dur = inp(L('Durată (min)', 'Duration (min)'), { type: 'number', min: 30, max: 1440, value: 180, style: 'width:90px' });
+    const dep = inp(L('Plecare (ICAO)', 'Departure (ICAO)'), { maxlength: 8, style: 'width:110px' });
+    const arr = inp(L('Sosire (ICAO)', 'Arrival (ICAO)'), { maxlength: 8, style: 'width:110px' });
+    const ac = inp(L('Avion recomandat (opțional)', 'Suggested aircraft (optional)'), { maxlength: 40 });
+    const bonus = inp('XP', { type: 'number', min: 0, max: 500, value: 150, style: 'width:80px' });
+    const bmoney = inp('$', { type: 'number', min: 0, max: 1000000, step: 1000, value: 0, style: 'width:100px' });
+    const desc = el('textarea', { rows: 2, maxlength: 600, placeholder: L('Descriere (opțional): briefing, reguli, server, etc.', 'Description (optional): briefing, rules, etc.'), style: 'width:100%;box-sizing:border-box;resize:vertical' });
+    const ann = el('input', { type: 'checkbox', checked: true });
+    const list = el('div', { class: 'gcr-list', style: 'max-height:none' });
+    const d0 = new Date(Date.now() + 86400000); d0.setMinutes(0, 0, 0);
+    when.value = new Date(d0.getTime() - d0.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    const create = async () => {
+      if (!when.value) { ui.toast(L('Alege data și ora.', 'Pick a date and time.')); return; }
+      if (DB.loaded && dep.value && !DB.info.get(dep.value.trim().toUpperCase())) { ui.toast(L(`Nu cunosc aeroportul ${dep.value}.`, `Unknown airport ${dep.value}.`)); return; }
+      if (DB.loaded && arr.value && !DB.info.get(arr.value.trim().toUpperCase())) { ui.toast(L(`Nu cunosc aeroportul ${arr.value}.`, `Unknown airport ${arr.value}.`)); return; }
+      try {
+        await rpc('admin_create_event', { p_key: CAREER.key, p_title: title.value, p_desc: desc.value, p_starts: new Date(when.value).toISOString(), p_dep: dep.value || null, p_arr: arr.value || null,
+          p_aircraft: ac.value || null, p_bonus: +bonus.value || 0, p_money: +bmoney.value || 0, p_duration: +dur.value || 180, p_announce: ann.checked });
+        ui.toast(L('📅 Eveniment creat' + (ann.checked ? ' și anunțat tuturor.' : '.'), '📅 Event created' + (ann.checked ? ' and announced to everyone.' : '.')), 6000);
+        title.value = ''; desc.value = ''; loadEvents(true);
+      } catch (e) { ui.toast(L('Nu s-a creat: ', 'Not created: ') + e.message, 8000); }
+    };
+    ui.renderAdminEvents = () => {
+      list.innerHTML = '';
+      const up = EVENTS.data ? EVENTS.data.upcoming : [];
+      if (!up.length) list.append(el('div', { class: 'gcr-item gcr-muted' }, L('Niciun eveniment programat.', 'No events scheduled.')));
+      up.forEach((e) => {
+        const t = el('b'); t.textContent = e.title;
+        list.append(el('div', { class: 'gcr-item' }, el('div', { style: 'flex:1;min-width:0' }, t, el('div', { class: 'gcr-muted', style: 'font-size:11px' }, `${evWhen(e)} · ${e.dep || '—'} → ${e.arr || '—'} · ${evReward(e) || L('fără bonus', 'no bonus')} · 👥 ${e.going} · ✓ ${e.finished}`)),
+          el('button', { class: 'gcr-btn sm warn', onclick: async () => { if (e._ask && Date.now() - e._ask < 4000) { try { await rpc('admin_cancel_event', { p_key: CAREER.key, p_id: e.id }); ui.toast(L('Eveniment anulat.', 'Event cancelled.')); loadEvents(true); } catch (err) { ui.toast(err.message); } } else { e._ask = Date.now(); ui.toast(L('Apasă din nou ca să anulezi evenimentul.', 'Press again to cancel the event.')); } } }, L('Anulează', 'Cancel'))));
+      });
+    };
+    wrap.append(el('b', { style: 'display:block;margin-top:12px' }, '📅 ' + L('Creează un eveniment', 'Create an event')),
+      el('div', { class: 'gcr-row' }, title),
+      el('div', { class: 'gcr-row' }, el('span', {}, L('Start (ora ta):', 'Start (your time):')), when, dur, el('span', { class: 'gcr-muted' }, 'min')),
+      el('div', { class: 'gcr-row' }, dep, el('span', {}, '→'), arr, el('span', { class: 'gcr-muted' }, L('(goale = liber)', '(empty = any)'))),
+      el('div', { class: 'gcr-row' }, ac),
+      el('div', { class: 'gcr-row' }, el('span', {}, L('Bonus:', 'Bonus:')), bonus, el('span', { class: 'gcr-muted' }, 'XP'), el('span', {}, '+ $'), bmoney, el('span', { class: 'gcr-muted' }, L('(0 = fără)', '(0 = none)'))),
+      desc,
+      el('div', { class: 'gcr-row' }, el('label', {}, ann, ' ', L('Anunță-i pe toți acum', 'Announce to everyone now')), el('button', { class: 'gcr-btn sm ok', onclick: create }, '📅 ' + L('Creează', 'Create'))),
+      el('div', { class: 'gcr-muted' }, L('Participă cine pleacă cel mult cu 30 de minute înainte de start și aterizează la destinație în timpul evenimentului. Bonusul de XP și bani se primește o singură dată.', 'A pilot takes part by departing no earlier than 30 min before the start and landing at the destination during the event. The XP and money bonus are given once.')),
+      el('b', { style: 'display:block;margin-top:8px' }, L('Evenimente programate', 'Scheduled events')), list);
+    ui.renderAdminEvents();
+    return wrap;
   }
 
   /* ---------------- Interfață: Carieră, Școală, Jurnal ---------------- */

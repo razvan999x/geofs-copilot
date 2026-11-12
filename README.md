@@ -24,6 +24,7 @@ Type a city name and the plugin flies the whole trip: automatic takeoff, climb, 
 - **Weekly landing contest.** Your best landing of the week is ranked automatically. The top 3 get the Podium badge.
 - **Special missions.** Bush flights to short strips, sightseeing tours over famous landmarks, skydiver drops, aerial survey photos at an exact altitude, and search & rescue with a signal that grows as you get closer.
 - **Airport passport.** Every airport and country you land at is stamped, with flags in the plugin and a map on your profile.
+- **Events.** Group flights and challenges announced in the plugin and on the website. Join, get a reminder, fly the route during the event and earn the XP and money bonus.
 - **Your own airline.** Found an airline at your hub, buy aircraft and give them routes you have flown yourself. They earn money even when you are offline, for up to 24 hours, so come back daily to collect. Good landings raise your reputation, and reputation raises income.
 - **Career.** Earn XP from flights, missions, lessons and achievements. Rise through 7 ranks, from Student Pilot to Chief Pilot. Higher ranks unlock bigger aircraft for missions and pay more. You can also buy a type rating early.
 - **Emergencies.** Random failures, if you turn them on: engine failure, jammed gear, bird strike, fuel leak, a medical emergency on board, autopilot failure. Each comes with a checklist, a divert-to-nearest-airport button and MAYDAY.

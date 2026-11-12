@@ -72,6 +72,7 @@
     <nav id="nav">
       <a href="#/" data-r="">Home</a>
       <a href="#/leaderboard" data-r="leaderboard" data-i="nav_lb">Leaderboard</a>
+      <a href="#/events" data-r="events" data-i="nav_ev">Events</a>
       <a href="#/daily" data-r="daily" data-i="nav_daily">Daily</a>
       <a href="#/contest" data-r="contest" data-i="nav_contest">Contest</a>
       <a href="#/airlines" data-r="airlines" data-i="nav_air">Airlines</a>
@@ -103,7 +104,10 @@ const flag = (c) => c && /^[A-Z]{2}$/.test(c) ? String.fromCodePoint(...[...c].m
 const cname = (c) => { try { return new Intl.DisplayNames([lang], {type:'region'}).of(c); } catch (e) { return c; } };
 let lang = localStorage.getItem('gcLang') || ((navigator.language||'').startsWith('ro') ? 'ro' : 'en');
 const T = {
-  nav_lb:['Leaderboard','Clasament'], nav_daily:['Daily','Provocarea zilei'], nav_contest:['Contest','Concurs'], nav_air:['Airlines','Companii'],
+  nav_lb:['Leaderboard','Clasament'], notFound:['Not found.','Nu a fost găsit.'], nav_ev:['Events','Evenimente'],
+  events:['Events','Evenimente'], evLead:['Group flights and challenges announced by the GeoFS Copilot team. Join them in the plugin (Missions tab) – take off no earlier than 30 minutes before the start and land at the destination during the event to earn the bonus.','Zboruri de grup și provocări anunțate de echipa GeoFS Copilot. Te înscrii din plugin (tab-ul Misiuni). Ca să primești bonusul, decolează cel mult cu 30 de minute înainte de start și aterizează la destinație în timpul evenimentului.'],
+  upcoming:['Upcoming','Urmează'], pastEv:['Past events','Evenimente trecute'], noEvents:['No events scheduled right now – check back soon!','Niciun eveniment programat acum – revino curând!'],
+  live:['LIVE NOW','ÎN DESFĂȘURARE'], going:['going','înscriși'], finishedN:['finished','au terminat'], results:['Results','Rezultate'], participants:['Signed up','Înscriși'], noResults:['Nobody has finished yet.','Nimeni n-a terminat încă.'], freeRoute:['free route','rută liberă'], nav_daily:['Daily','Provocarea zilei'], nav_contest:['Contest','Concurs'], nav_air:['Airlines','Companii'],
   daily:['Daily challenge','Provocarea zilei'], dailyLead:['One airport for everyone, every day. Land there and post the best score – you can retry as many times as you like until midnight UTC.','Un aeroport pentru toți, în fiecare zi. Aterizează acolo și obține cel mai bun scor – poți reîncerca de câte ori vrei până la miezul nopții UTC.'],
   dailyHow:['In the plugin: Missions tab → “Fly it now” puts you on an 8 NM final. Or fly there any way you like.','În plugin: tab-ul Misiuni → „Zboară acum” te pune pe o finală de 8 NM. Sau zbori până acolo cum vrei.'],
   tomorrow:['Tomorrow','Mâine'], players:['pilots','piloți'], attempts:['tries','încercări'], noDaily:['Nobody has landed yet today – be the first!','Nimeni n-a aterizat încă azi – fii primul!'],
@@ -155,6 +159,7 @@ async function home() {
   app.innerHTML = `<div class="hero"><div><h1>${t('h1')}</h1><p>${t('lead')}</p>
     <a class="btn pri" href="#/install">✈ ${t('install')}</a> <a class="btn" href="#/leaderboard">🏆 ${t('seeLb')}</a></div>
     <div class="stats" id="stats">${[0,1,2,3,4,5].map(() => '<div class="stat"><b>…</b><span>&nbsp;</span></div>').join('')}</div></div>
+    <section id="hev"></section>
     <section class="grid2"><div><h2>🏆 ${t('daily')} <a class="muted" style="font-size:14px" href="#/daily">→</a></h2><div class="card" id="hdaily"><div class="empty">${t('loading')}</div></div></div>
       <div><h2>🧈 ${t('contest')} <a class="muted" style="font-size:14px" href="#/contest">→</a></h2><div class="card" id="hcontest"><div class="empty">${t('loading')}</div></div></div></section>
     <section><h2>🏆 ${t('topPilots')}</h2><div class="card" id="top"><div class="empty">${t('loading')}</div></div></section>
@@ -163,6 +168,7 @@ async function home() {
     <section><h2>${t('features')}</h2><div class="feat">${features().map((f) => `<div><span style="font-size:24px">${f[0]}</span><b>${f[1]}</b><p>${f[2]}</p></div>`).join('')}</div></section>`;
   try { const s = await rpc('get_stats'); document.getElementById('stats').innerHTML = [[s.pilots,t('pilots')],[s.flights,t('flights')],[s.hours,t('hours')],[s.nm,t('nm')],s.countries ? [s.countries,t('countries')] : [s.airports,t('airportsW')],[s.flights_24h,t('f24')]].map(([v,l]) => `<div class="stat"><b>${fmt(v)}</b><span>${l}</span></div>`).join(''); } catch (e) { document.getElementById('stats').innerHTML = ''; }
   rpc('get_leaderboard', {p_sort:'xp', p_limit:10}).then((r) => { document.getElementById('top').innerHTML = pilotTable(r); }).catch(() => {});
+  rpc('get_events', {}).then((d) => { if (d.upcoming.length) document.getElementById('hev').innerHTML = `<h2>📅 ${t('upcoming')} <a class="muted" style="font-size:14px" href="#/events">→</a></h2>` + d.upcoming.slice(0, 3).map(evCard).join(''); }).catch(() => {});
   rpc('get_daily', {p_limit:5}).then((d) => { document.getElementById('hdaily').innerHTML = dailyHead(d) + scoreTable(d.board, 'daily'); }).catch(() => {});
   rpc('get_landing_contest', {p_limit:5}).then((c) => { document.getElementById('hcontest').innerHTML = scoreTable(c.board, 'contest'); }).catch(() => {});
   rpc('get_recent_flights', {p_limit:8, p_best:true}).then((r) => { document.getElementById('best').innerHTML = flightTable(r, true); }).catch(() => {});
@@ -286,6 +292,36 @@ function loadLeaflet() {
     const s = document.createElement('script'); s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s);
   });
 }
+function evCard(e) {
+  const st = Date.parse(e.starts_at), en = Date.parse(e.ends_at), live = Date.now() >= st && Date.now() < en;
+  const reward = [e.bonus_xp ? `+${fmt(e.bonus_xp)} XP` : '', e.bonus_money ? `+$${fmt(e.bonus_money)}` : ''].filter(Boolean).join(' · ');
+  const when = new Date(st).toLocaleString(lang === 'ro' ? 'ro-RO' : 'en-GB', {weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
+  return `<a href="#/event/${e.id}" class="card" style="display:block;padding:14px 16px;margin-bottom:10px;text-decoration:none;color:inherit;${live ? 'border-color:#ff5252' : ''}">
+    <div class="muted" style="font-size:13px">${live ? `<b style="color:#ff5252">🔴 ${t('live')}</b> · ` : ''}${esc(when)}</div>
+    <div style="font-size:19px;font-weight:800;margin:2px 0">${esc(e.title)}</div>
+    <div>${e.dep || e.arr ? `${esc(e.dep || '…')} → ${esc(e.arr || '…')}` : t('freeRoute')}${e.aircraft ? ` · ✈ ${esc(e.aircraft)}` : ''}${reward ? ` · <b>${reward}</b>` : ''} · 👥 ${fmt(e.going)} ${t('going')} · ✓ ${fmt(e.finished)} ${t('finishedN')}</div></a>`;
+}
+async function events() {
+  app.innerHTML = `<section><h2>📅 ${t('events')}</h2><p class="muted">${t('evLead')}</p><div id="evu"><div class="empty">${t('loading')}</div></div><h2 style="margin-top:22px">${t('pastEv')}</h2><div id="evp"></div></section>`;
+  try {
+    const d = await rpc('get_events', {});
+    document.getElementById('evu').innerHTML = d.upcoming.length ? d.upcoming.map(evCard).join('') : `<div class="card"><div class="empty">${t('noEvents')}</div></div>`;
+    document.getElementById('evp').innerHTML = d.past.length ? d.past.map(evCard).join('') : `<div class="muted">—</div>`;
+  } catch (e) { document.getElementById('evu').innerHTML = `<div class="empty">⚠ ${esc(e.message)}</div>`; }
+}
+async function eventPage(id) {
+  app.innerHTML = `<div class="empty">${t('loading')}</div>`;
+  try {
+    const d = await rpc('get_event', {p_id: +id});
+    if (!d) { app.innerHTML = `<div class="empty">${t('notFound')}</div>`; return; }
+    const e = d.event;
+    app.innerHTML = `<section><p><a href="#/events">← ${t('events')}</a></p>${evCard(e)}
+      ${e.description ? `<div class="card" style="padding:14px 16px;margin-bottom:12px;white-space:pre-wrap">${esc(e.description)}</div>` : ''}
+      <div class="grid2"><div><h2>🏁 ${t('results')}</h2><div class="card">${d.results.length ? `<div class="scroll"><table><thead><tr><th>#</th><th>${t('pilot')}</th><th class="num">${t('score')}</th><th class="num">${t('landing')}</th><th class="hide-m">${t('aircraft')}</th></tr></thead><tbody>` +
+        d.results.map((x) => `<tr class="p${x.pos}"><td class="pos">${['🥇','🥈','🥉'][x.pos-1] || x.pos}</td><td><a href="#/pilot/${x.pilot_id}"><b>${esc(x.callsign)}</b></a></td><td class="num">${x.score != null ? `<b>${x.score}</b>` : '—'}</td><td class="num">${x.vs != null ? fmt(x.vs) + ' fpm' : '—'}</td><td class="hide-m muted">${esc(x.aircraft || '')}</td></tr>`).join('') + '</tbody></table></div>' : `<div class="empty">${t('noResults')}</div>`}</div></div>
+      <div><h2>👥 ${t('participants')} (${d.going.length})</h2><div class="card" style="padding:12px 16px">${d.going.length ? d.going.map((g) => `<a href="#/pilot/${g.pilot_id}">${esc(g.callsign)}</a>`).join(' · ') : '<span class="muted">—</span>'}</div></div></div></section>`;
+  } catch (e) { app.innerHTML = `<div class="empty">⚠ ${esc(e.message)}</div>`; }
+}
 function route() {
   const parts = location.hash.replace(/^#\/?/, '').split('/');
   document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.r === (parts[0] === 'pilot' ? 'leaderboard' : parts[0])));
@@ -293,6 +329,8 @@ function route() {
   if (parts[0] === 'leaderboard') return leaderboard(parts[1]);
   if (parts[0] === 'flights') return flights();
   if (parts[0] === 'daily') return daily();
+  if (parts[0] === 'events') return events();
+  if (parts[0] === 'event') return eventPage(parts[1]);
   if (parts[0] === 'contest') return contest(parts[1]);
   if (parts[0] === 'airlines') return airlines();
   if (parts[0] === 'install') return install();
