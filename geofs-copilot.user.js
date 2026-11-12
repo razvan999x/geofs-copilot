@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.9.1
+// @version      1.9.2
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -123,7 +123,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.9.1';
+  const VERSION = '1.9.2';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -1359,7 +1359,7 @@ function gcrMain() {
     setInterval(() => { try { eventsTick(); } catch (e) { /* */ } }, 30000);
     setTimeout(() => { try { eventsTick(); } catch (e) { /* */ } }, 9000);
     setInterval(() => { checkUpdate(); }, 3 * 3600000);
-    setInterval(() => { try { adminTick(); } catch (e) { /* */ } }, 2000);
+    setInterval(() => { try { adminTick(); beaconRetryTick(); } catch (e) { /* */ } }, 2000);
     setInterval(() => { pollNotices(); }, 60000);
     setInterval(() => { adminCheck(); }, 600000);
     setInterval(() => { try { cloudSave(false); } catch (e) { /* */ } }, 30000);
@@ -2317,7 +2317,15 @@ function gcrMain() {
    * Metoda 1: un câmp mic (st.cp = versiunea) adăugat în actualizarea de poziție trimisă oricum de GeoFS.
    *           Dacă serverul dă erori după ce îl adăugăm, ne oprim singuri (multiplayerul rămâne neatins).
    * Metoda 2: oricine trimite mesaje ATC prin plugin e marcat. */
-  const COP = { byId: {}, byCs: {}, beaconOff: false, errStreak: 0, okSinceOn: 0 };
+  const COP = { byId: {}, byCs: {}, beaconOff: false, beaconPerm: false, offAt: 0, offCount: 0, plainOk: 0, plainErr: 0, errStreak: 0, okSinceOn: 0 };
+  /** Semnalul oprit temporar se repornește singur după 2 minute (erorile sunt de obicei probleme de rețea, nu semnalul). */
+  function beaconRetryTick() {
+    if (!COP.beaconOff || COP.beaconPerm || Date.now() - COP.offAt < 120000) return;
+    // rămâne oprit definitiv doar dacă de 3 ori la rând cererile fără semnal au mers, iar cele cu semnal nu
+    if (COP.plainOk > 0 && COP.plainErr === 0) COP.offCount++; else COP.offCount = 0;
+    if (COP.offCount >= 3) { COP.beaconPerm = true; console.warn('[GeoFS Copilot] beacon disabled – the multiplayer server keeps rejecting it'); return; }
+    COP.beaconOff = false; COP.errStreak = 0; COP.okSinceOn = 0; COP.plainOk = 0; COP.plainErr = 0;
+  }
   // numele „Foo” e comun tuturor piloților nelogați – nu identifică pe nimeni
   const genericCs = (cs) => !cs || /^foo$/i.test(String(cs).trim());
   function hookBeacon() {
@@ -2330,13 +2338,17 @@ function gcrMain() {
           data.st.cp = `${VERSION}|${rankIdx()}|${CAREER.xp}` + (settings.atcRole === 'ctrl' && settings.atcStation ? `|ATC:${settings.atcStation}:${settings.atcRwy || ''}` : ''); tagged = true;
         }
       } catch (e) { /* */ }
-      if (!tagged) return orig.apply(this, arguments);
-      const ok2 = function () { COP.errStreak = 0; COP.okSinceOn++; return ok && ok.apply(this, arguments); };
+      if (!tagged) {
+        if (COP.beaconOff && typeof url === 'string' && url.indexOf('/update') >= 0) { // cât e oprit: vedem dacă și cererile normale eșuează
+          return orig.call(this, url, data, function () { COP.plainOk++; return ok && ok.apply(this, arguments); }, function () { COP.plainErr++; return err && err.apply(this, arguments); });
+        }
+        return orig.apply(this, arguments);
+      }
+      const ok2 = function () { COP.errStreak = 0; COP.okSinceOn++; if (COP.okSinceOn >= 3) COP.offCount = 0; return ok && ok.apply(this, arguments); };
       const err2 = function () {
         COP.errStreak++;
-        if (COP.errStreak >= 3 && COP.okSinceOn < 3) { // serverul nu acceptă câmpul: îl oprim
-          COP.beaconOff = true;
-          console.warn('[GeoFS Copilot] beacon disabled – the multiplayer server rejected the extra field');
+        if (COP.errStreak >= 3 && COP.okSinceOn < 3) { // poate serverul nu acceptă câmpul: îl oprim temporar și verificăm
+          COP.beaconOff = true; COP.offAt = Date.now(); COP.plainOk = 0; COP.plainErr = 0;
         }
         return err && err.apply(this, arguments);
       };
@@ -2616,7 +2628,9 @@ function gcrMain() {
         COP.global && COP.global.ok ? el('span', {}, L(' · online în total: ', ' · online worldwide: '), el('b', { style: 'color:#ffd54f' }, String(COP.global.count + (settings.cpBeacon !== false ? 1 : 0)))) : null));
       list.sort((a, b) => distM(la, lo, a.lat, a.lon) - distM(la, lo, b.lat, b.lon)).slice(0, 8).forEach((t) =>
         copBox.append(el('div', {}, `★ ${t.cs}${t.rank != null ? ' · ' + rankName(t.rank) : ''} · ${Math.round(distM(la, lo, t.lat, t.lon) / NM)} NM · ${Math.round(t.altM / FT)} ft · ${Math.round(t.kias)} kt`)));
-      if (COP.beaconOff) copBox.append(el('div', { style: 'color:#ff8a80' }, L('Serverul GeoFS nu a acceptat semnalul ascuns – recunoașterea merge doar prin mesajele ATC.', 'The GeoFS server rejected the hidden signal – recognition works through ATC messages only.')));
+      if (COP.beaconPerm) copBox.append(el('div', { style: 'color:#ff8a80' }, L('Serverul GeoFS nu acceptă semnalul ascuns – recunoașterea merge doar prin mesajele ATC. ', 'The GeoFS server is not accepting the hidden signal – recognition works through ATC messages only. '),
+        el('a', { href: '#', class: 'gcr-link', onclick: (e) => { e.preventDefault(); Object.assign(COP, { beaconPerm: false, beaconOff: false, offCount: 0, errStreak: 0, okSinceOn: 0 }); ui.toast(L('Reîncerc semnalul…', 'Retrying the signal…')); } }, L('reîncearcă', 'retry'))));
+      else if (COP.beaconOff) copBox.append(el('div', { class: 'gcr-muted' }, L('Conexiune multiplayer instabilă – reîncerc semnalul în curând.', 'Unstable multiplayer connection – retrying the signal shortly.')));
     };
     pilotBox.append(
       el('div', { class: 'gcr-row' }, el('label', { style: 'min-width:0' }, beacon, ' ', L('Arată-le celorlalți utilizatori Copilot că folosesc pluginul', 'Show other Copilot users that I use the plugin'))),
