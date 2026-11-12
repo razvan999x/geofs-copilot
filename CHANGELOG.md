@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.1
+- Notifications: the administrator can send a message to all players or to one pilot. It pops up in GeoFS within a minute (kept for 7 days).
+- Administrator mode for the project owner (confirmed by the server): hidden from leaderboards and stats, optional unlimited money and top rank.
+
 ## 1.8.0
 - **Daily challenge:** one tricky airport a day for everyone, with a *Fly it now* button that puts you on final and a daily leaderboard.
 - **Day streaks:** bonus XP for the first flight of each day, up to +70 XP.

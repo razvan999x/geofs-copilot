@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.8.0
+// @version      1.8.1
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -123,7 +123,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.8.0';
+  const VERSION = '1.8.1';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -1354,6 +1354,10 @@ function gcrMain() {
     try { $(document).on('flyto', () => setTimeout(() => { if (AP.rwy) { buildRoute(); drawApproach(); } }, 1500)); } catch (e) { /* */ }
     loadRunways();
     setTimeout(() => { try { cloudInit(); } catch (e) { /* */ } }, 4000);
+    setTimeout(() => { adminCheck(); pollNotices(); }, 7000);
+    setInterval(() => { try { adminTick(); } catch (e) { /* */ } }, 2000);
+    setInterval(() => { pollNotices(); }, 60000);
+    setInterval(() => { adminCheck(); }, 600000);
     setInterval(() => { try { cloudSave(false); } catch (e) { /* */ } }, 30000);
     ui.toast(L('GeoFS Copilot RO încărcat – Shift+N deschide/închide panoul.', 'GeoFS Copilot loaded – Shift+N opens/closes the panel.'));
   }
@@ -1368,7 +1372,7 @@ function gcrMain() {
       el('button', { title: L('Ascunde (Shift+N)', 'Hide (Shift+N)'), onclick: () => togglePanel(false) }, '–'));
     const tabsBar = el('div', { class: 'gcr-tabs' });
     const body = el('div', { class: 'gcr-body' });
-    const tabs = { nav: L('Navigație', 'Nav'), ap: L('Pilot auto', 'Autopilot'), sys: L('Avion', 'Aircraft'), mis: L('Misiuni', 'Missions'), car: L('Carieră', 'Career'), air: L('Companie', 'Airline'), trn: L('Școală', 'Training'), log: L('Jurnal', 'Logbook'), atc: 'ATC', set: L('Setări', 'Settings') };
+    const tabs = { nav: L('Navigație', 'Nav'), ap: L('Pilot auto', 'Autopilot'), sys: L('Avion', 'Aircraft'), mis: L('Misiuni', 'Missions'), car: L('Carieră', 'Career'), air: L('Companie', 'Airline'), trn: L('Școală', 'Training'), log: L('Jurnal', 'Logbook'), atc: 'ATC', set: L('Setări', 'Settings'), adm: '🛡️ Admin' };
     const pages = {};
     Object.keys(tabs).forEach((k) => {
       const b = el('button', { onclick: () => showTab(k) }, tabs[k]); b.dataset.k = k; tabsBar.append(b);
@@ -1378,6 +1382,7 @@ function gcrMain() {
       [...tabsBar.children].forEach((b) => b.classList.toggle('on', b.dataset.k === k));
       Object.keys(pages).forEach((p) => { pages[p].style.display = p === k ? '' : 'none'; });
       ui.tab = k;
+      if (k === 'adm' && ui.renderAdmin) ui.renderAdmin();
     }
     panel.append(head, tabsBar, body);
     document.body.append(panel, fab);
@@ -1412,6 +1417,9 @@ function gcrMain() {
     buildLogPage(pages.log);
     buildAtcPage(pages.atc);
     buildSetPage(pages.set);
+    buildAdminPage(pages.adm);
+    ui.showAdminTab = (on) => { const b = tabsBar.querySelector('button[data-k=adm]'); if (b) b.style.display = on ? '' : 'none'; if (!on && ui.tab === 'adm') showTab('nav'); };
+    ui.showAdminTab(ADMIN.on);
     showTab('nav');
   }
 
@@ -3146,6 +3154,7 @@ function gcrMain() {
    *  CARIERĂ · JURNAL DE ZBOR · REALIZĂRI · URGENȚE · ȘCOALĂ DE ZBOR · CLASAMENT ONLINE
    * ===================================================================== */
   const ONLINE = { url: 'https://hpsvmyidwqgptgiaweuo.supabase.co', key: 'sb_publishable_NGXvayFPZlpCXkPywDVF9w_D7rUw0Bb', site: 'https://razvan999x.github.io/geofs-copilot/' };
+  const ADMIN = { on: !!store.get('geofsCopilotRO.admin', false), hidden: false }; // confirmat de server la pornire
   const RANKS = [
     { xp: 0, ro: 'Elev pilot', en: 'Student Pilot', cls: 0 },
     { xp: 150, ro: 'Pilot privat', en: 'Private Pilot', cls: 1 },
@@ -3168,7 +3177,7 @@ function gcrMain() {
   if (!CAREER.key) { const b = new Uint8Array(24); crypto.getRandomValues(b); CAREER.key = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join(''); }
   const saveCareer = () => { store.set('geofsCopilotRO.career', CAREER); if (window.__gcrDirty) window.__gcrDirty(); };
   saveCareer();
-  function rankIdx(xp) { let i = 0; RANKS.forEach((r, k) => { if ((xp != null ? xp : CAREER.xp) >= r.xp) i = k; }); return i; }
+  function rankIdx(xp) { if (xp == null && adminCheats()) return RANKS.length - 1; let i = 0; RANKS.forEach((r, k) => { if ((xp != null ? xp : CAREER.xp) >= r.xp) i = k; }); return i; }
   const rankName = (i) => L(RANKS[i].ro, RANKS[i].en);
   function acClass() { const m = (sim.ac().definition && sim.ac().definition.mass) || 5000; return CLASSES.findIndex((c) => m < c.max); }
   function classAllowed(ci) { return ci <= RANKS[rankIdx()].cls || CAREER.ratings.includes(ci); }
@@ -4195,6 +4204,100 @@ function gcrMain() {
     wrap.append(el('div', { class: 'gcr-row', style: 'margin-top:8px;justify-content:space-between' }, el('b', {}, '🌐 ' + L('Top companii', 'Top airlines')),
       el('a', { href: ONLINE.site + '#/airlines', target: '_blank', rel: 'noopener', class: 'gcr-link' }, L('toate →', 'all →'))), lb);
     return wrap;
+  }
+
+  /* ---------------- Notificări de la administrator (pentru toți utilizatorii) ---------------- */
+  const NOTICES = { last: store.get('geofsCopilotRO.noticeLast', null), busy: false, queue: [] };
+  async function pollNotices() {
+    if (!settings.onlineSync || NOTICES.busy) return;
+    NOTICES.busy = true;
+    try {
+      const list = await rpc('get_notices', { p_key: CAREER.key, p_since: NOTICES.last || 0 });
+      if (Array.isArray(list) && list.length) {
+        const fresh = NOTICES.last == null ? list.slice(-3) : list; // prima pornire: doar ultimele 3
+        NOTICES.last = list[list.length - 1].id; store.set('geofsCopilotRO.noticeLast', NOTICES.last);
+        fresh.forEach((n) => NOTICES.queue.push(n));
+        showNextNotice();
+      } else if (NOTICES.last == null) { NOTICES.last = 0; store.set('geofsCopilotRO.noticeLast', 0); }
+    } catch (e) { /* server indisponibil */ } finally { NOTICES.busy = false; }
+  }
+  function showNextNotice() {
+    if (document.getElementById('gcr-notice') || !NOTICES.queue.length) return;
+    const n = NOTICES.queue.shift();
+    const msg = el('div', { style: 'white-space:pre-wrap;font-size:14px;line-height:1.4;margin:6px 0 8px' }); msg.textContent = n.message;
+    const box = el('div', { id: 'gcr-notice', style: 'position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:100001;max-width:460px;width:calc(100% - 40px);background:rgba(28,14,48,.97);border:2px solid #e040fb;border-radius:12px;padding:12px 14px;color:#fff;font:13px system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.6)' },
+      el('div', { style: 'display:flex;justify-content:space-between;align-items:center' }, el('b', { style: 'color:#f3b6ff' }, `📢 GeoFS Copilot${n.personal ? L(' · mesaj pentru tine', ' · message for you') : ''}`), el('span', { class: 'gcr-muted', style: 'font-size:11px' }, new Date(n.at).toLocaleString())),
+      msg, el('button', { class: 'gcr-btn sm ok', onclick: () => { box.remove(); showNextNotice(); } }, 'OK'));
+    ['mousedown', 'pointerdown', 'wheel', 'keydown'].forEach((t) => box.addEventListener(t, (e) => e.stopPropagation()));
+    document.body.append(box); say('New message', 0);
+  }
+
+  /* ---------------- Administrator ---------------- */
+  async function adminCheck() {
+    if (!settings.onlineSync) return;
+    try {
+      const r = await rpc('admin_status', { p_key: CAREER.key });
+      const was = ADMIN.on; ADMIN.on = !!(r && r.admin); ADMIN.hidden = !!(r && r.hidden);
+      store.set('geofsCopilotRO.admin', ADMIN.on);
+      if (ADMIN.on !== was) { OFFERS.t = 0; ui.renderCareer && ui.renderCareer(); ui.renderMissions && ui.renderMissions(); }
+      if (ADMIN.on && !was) ui.toast(L('🛡️ Mod administrator activ.', '🛡️ Administrator mode active.'), 6000);
+    } catch (e) { /* */ }
+    ui.showAdminTab && ui.showAdminTab(ADMIN.on);
+  }
+  const adminCheats = () => ADMIN.on && settings.adminCheats !== false;
+  function adminTick() {
+    if (!adminCheats()) return;
+    if (ECON.balance < 5e6) { ECON.balance = 1e7; saveEcon(); }
+  }
+  function buildAdminPage(p) {
+    const box = el('div'); p.append(box);
+    const A = { pilots: [], sent: [], q: '', to: '' };
+    const loadPilots = async () => { try { A.pilots = await rpc('admin_pilots', { p_key: CAREER.key, p_q: A.q }) || []; } catch (e) { ui.toast('Admin: ' + e.message); } render(); };
+    const loadSent = async () => { try { A.sent = await rpc('admin_list_notices', { p_key: CAREER.key }) || []; } catch (e) { /* */ } render(); };
+    const msg = el('textarea', { rows: 3, maxlength: 400, placeholder: L('Mesajul tău (max. 400 caractere)…', 'Your message (max 400 characters)…'), style: 'width:100%;box-sizing:border-box;resize:vertical' });
+    const search = el('input', { placeholder: L('Caută pilot după indicativ', 'Search pilot by callsign'), style: 'flex:1;min-width:0' });
+    search.addEventListener('keydown', (e) => { if (e.key === 'Enter') { A.q = search.value.trim(); loadPilots(); } });
+    const target = el('select', { style: 'flex:1;min-width:0' });
+    target.addEventListener('change', () => { A.to = target.value; });
+    const sentBox = el('div', { class: 'gcr-list', style: 'max-height:none' });
+    const send = async () => {
+      const text = msg.value.trim(); if (!text) { ui.toast(L('Scrie un mesaj.', 'Write a message.')); return; }
+      const who = A.to ? (A.pilots.find((x) => x.id === A.to) || {}).callsign : L('toți jucătorii', 'all players');
+      try {
+        await rpc('admin_send_notice', { p_key: CAREER.key, p_to: A.to || null, p_msg: text });
+        msg.value = ''; ui.toast(L(`📢 Trimis către ${who}.`, `📢 Sent to ${who}.`)); loadSent();
+      } catch (e) { ui.toast(L('Nu s-a trimis: ', 'Not sent: ') + e.message, 8000); }
+    };
+    const cheats = el('input', { type: 'checkbox' });
+    cheats.addEventListener('change', () => { settings.adminCheats = cheats.checked; saveSettings(); OFFERS.t = 0; adminTick(); ui.renderCareer && ui.renderCareer(); ui.renderMissions && ui.renderMissions(); });
+    function render() {
+      cheats.checked = settings.adminCheats !== false;
+      const cur = target.value;
+      target.innerHTML = '';
+      target.append(el('option', { value: '' }, '📣 ' + L('Toți jucătorii', 'All players')), ...A.pilots.filter((x) => !x.hidden).map((x) => el('option', { value: x.id }, `👤 ${x.callsign} · ${x.xp} XP · ${x.flights} ${L('zboruri', 'flights')}`)));
+      target.value = A.pilots.some((x) => x.id === cur) ? cur : ''; A.to = target.value;
+      sentBox.innerHTML = '';
+      if (!A.sent.length) sentBox.append(el('div', { class: 'gcr-item gcr-muted' }, L('Niciun mesaj trimis.', 'No messages sent yet.')));
+      A.sent.forEach((n) => {
+        const t = el('span', { style: 'flex:1;min-width:0;white-space:pre-wrap' }); t.textContent = n.message;
+        sentBox.append(el('div', { class: 'gcr-item' }, el('div', { style: 'flex:1;min-width:0' }, el('div', { class: 'gcr-muted', style: 'font-size:11px' }, `${new Date(n.created_at).toLocaleString()} → ${n.to_pilot ? n.to_callsign : L('toți', 'everyone')}`), t),
+          el('button', { class: 'gcr-btn sm warn', title: L('Șterge (nu mai apare la cei care nu l-au văzut)', 'Delete (players who have not seen it will not get it)'), onclick: async () => { try { await rpc('admin_delete_notice', { p_key: CAREER.key, p_id: n.id }); loadSent(); } catch (e) { ui.toast(e.message); } } }, '✕')));
+      });
+    }
+    box.append(
+      el('div', { class: 'gcr-destcard', style: 'margin-top:0;border-color:#e040fb' },
+        el('div', { style: 'font-size:15px;font-weight:800' }, '🛡️ ' + L('Administrator', 'Administrator')),
+        el('div', { class: 'gcr-muted', style: 'margin:3px 0' }, L('Profilul tău e ascuns: nu apare în clasamente, statistici, provocarea zilei, concurs sau lista de companii.', 'Your profile is hidden: it does not appear in leaderboards, stats, the daily challenge, the contest or the airline list.')),
+        el('label', {}, cheats, ' ', L('Bani nelimitați, rang maxim și toate avioanele deblocate', 'Unlimited money, top rank and every aircraft unlocked'))),
+      el('b', { style: 'display:block;margin-top:10px' }, '📢 ' + L('Trimite o notificare', 'Send a notification')),
+      el('div', { class: 'gcr-muted' }, L('Apare ca o fereastră în GeoFS la jucătorii cu pluginul (în cel mult un minut, sau la următoarea pornire, timp de 7 zile).', 'It pops up in GeoFS for players with the plugin (within a minute, or next time they start it, for 7 days).')),
+      el('div', { class: 'gcr-row' }, search, el('button', { class: 'gcr-btn sm', onclick: () => { A.q = search.value.trim(); loadPilots(); } }, L('Caută', 'Search'))),
+      el('div', { class: 'gcr-row' }, el('span', {}, L('Către:', 'To:')), target),
+      msg,
+      el('div', { class: 'gcr-row' }, el('button', { class: 'gcr-btn sm ok', onclick: send }, '📢 ' + L('Trimite', 'Send'))),
+      el('b', { style: 'display:block;margin-top:10px' }, L('Mesaje trimise', 'Sent messages')), sentBox);
+    ui.renderAdmin = () => { loadPilots(); loadSent(); };
+    render();
   }
 
   /* ---------------- Interfață: Carieră, Școală, Jurnal ---------------- */
