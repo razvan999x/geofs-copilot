@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.8.2
+// @version      1.8.3
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -123,7 +123,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.8.2';
+  const VERSION = '1.8.3';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -1355,6 +1355,8 @@ function gcrMain() {
     loadRunways();
     setTimeout(() => { try { cloudInit(); } catch (e) { /* */ } }, 4000);
     setTimeout(() => { adminCheck(); pollNotices(); }, 7000);
+    setTimeout(() => { checkUpdate(); }, 15000);
+    setInterval(() => { checkUpdate(); }, 3 * 3600000);
     setInterval(() => { try { adminTick(); } catch (e) { /* */ } }, 2000);
     setInterval(() => { pollNotices(); }, 60000);
     setInterval(() => { adminCheck(); }, 600000);
@@ -1368,7 +1370,9 @@ function gcrMain() {
     const panel = el('div', { id: 'gcr-panel' });
     const copBadge = el('span', { class: 'gcr-copbadge', title: '' }, '★ 1');
     ui.copBadge = copBadge;
-    const head = el('div', { id: 'gcr-head' }, el('span', {}, '✈'), el('b', {}, 'GeoFS Copilot'), copBadge,
+    const updBadge = el('span', { title: '', style: 'display:none;cursor:pointer;background:#1b5e20;color:#b9f6ca;border-radius:8px;padding:0 6px;font-size:11px;margin-left:4px', onclick: () => showUpdate() }, '⬆️');
+    ui.markUpdate = () => { if (UPD.latest) { updBadge.style.display = ''; updBadge.textContent = '⬆️ ' + UPD.latest; updBadge.title = L('Versiune nouă disponibilă', 'New version available'); } };
+    const head = el('div', { id: 'gcr-head' }, el('span', {}, '✈'), el('b', {}, 'GeoFS Copilot'), copBadge, updBadge,
       el('button', { title: L('Ascunde (Shift+N)', 'Hide (Shift+N)'), onclick: () => togglePanel(false) }, '–'));
     const tabsBar = el('div', { class: 'gcr-tabs' });
     const body = el('div', { class: 'gcr-body' });
@@ -1766,7 +1770,8 @@ function gcrMain() {
     langSel.value = settings.lang === 'ro' ? 'ro' : 'en';
     langSel.addEventListener('change', () => { settings.lang = langSel.value; saveSettings(); rebuildUI(); });
     const about = el('div', { class: 'gcr-about' },
-      el('div', { style: 'font-size:14px;font-weight:700' }, '✈ GeoFS Copilot ', el('span', { class: 'gcr-muted', style: 'font-weight:400' }, 'v' + VERSION)),
+      el('div', { style: 'font-size:14px;font-weight:700' }, '✈ GeoFS Copilot ', el('span', { class: 'gcr-muted', style: 'font-weight:400' }, 'v' + VERSION),
+        UPD.latest ? el('a', { href: '#', class: 'gcr-link', style: 'margin-left:6px;color:#4cff8f', onclick: (e) => { e.preventDefault(); showUpdate(); } }, `⬆️ ${UPD.latest} ${L('disponibil', 'available')}`) : null),
       el('div', {}, L('Creat de ', 'Made by '), el('b', {}, AUTHOR)),
       el('div', {}, el('a', { href: REPO_URL, target: '_blank', rel: 'noopener', class: 'gcr-link' }, REPO_URL.replace('https://', ''))),
       el('div', { class: 'gcr-muted', style: 'margin-top:3px' }, L('Date aeroporturi: OurAirports (domeniu public)', 'Airport data: OurAirports (public domain)')));
@@ -4349,6 +4354,44 @@ function gcrMain() {
     render();
   }
 
+  /* ---------------- Anunț de versiune nouă ---------------- */
+  const UPD = { latest: null, notes: null, t: 0, src: document.documentElement.dataset.gcrSrc || 'tm' };
+  const verNum = (v) => String(v || '0').split('.').map((x) => parseInt(x, 10) || 0).reduce((a, x) => a * 1000 + x, 0);
+  async function checkUpdate() {
+    try {
+      const r = await fetch('https://raw.githubusercontent.com/razvan999x/geofs-copilot/main/version.json?t=' + Math.floor(Date.now() / 600000), { cache: 'no-store' });
+      if (!r.ok) return;
+      const j = await r.json();
+      if (!j || !j.version || verNum(j.version) <= verNum(VERSION)) { UPD.latest = null; return; }
+      UPD.latest = j.version; UPD.notes = j;
+      ui.markUpdate && ui.markUpdate();
+      const seen = store.get('geofsCopilotRO.updSeen', null);
+      if (!seen || seen.v !== j.version || Date.now() - seen.t > 12 * 3600000) showUpdate();
+    } catch (e) { /* fără rețea */ }
+  }
+  function showUpdate() {
+    if (!UPD.latest || document.getElementById('gcr-update')) return;
+    const j = UPD.notes;
+    const notes = (settings.lang === 'ro' ? j.notes_ro : j.notes_en) || j.notes_en || [];
+    const list = el('ul', { style: 'margin:6px 0 8px 18px;padding:0' }, ...notes.slice(0, 6).map((n) => { const li = el('li'); li.textContent = n; return li; }));
+    const close = () => { store.set('geofsCopilotRO.updSeen', { v: UPD.latest, t: Date.now() }); box.remove(); };
+    const how = UPD.src === 'bm'
+      ? L('Ai pornit pluginul din semnul de carte: reîncarcă GeoFS (F5) și apasă din nou pe semnul de carte – se încarcă automat versiunea nouă.', 'You started the plugin from the bookmark: reload GeoFS (F5) and click the bookmark again – it loads the new version automatically.')
+      : L('Tampermonkey: apasă „Actualizează acum”, confirmă cu Update/Reinstall în pagina care se deschide, apoi reîncarcă GeoFS (F5).', 'Tampermonkey: press “Update now”, confirm with Update/Reinstall on the page that opens, then reload GeoFS (F5).');
+    const box = el('div', { id: 'gcr-update', style: 'position:fixed;bottom:70px;right:20px;z-index:100001;width:340px;max-width:calc(100% - 40px);background:rgba(10,30,22,.97);border:2px solid #4cff8f;border-radius:12px;padding:12px 14px;color:#fff;font:13px system-ui,sans-serif;box-shadow:0 8px 30px rgba(0,0,0,.6)' },
+      el('b', { style: 'color:#4cff8f;font-size:14px' }, `⬆️ GeoFS Copilot ${UPD.latest} ${L('este disponibil!', 'is available!')}`),
+      el('div', { class: 'gcr-muted', style: 'font-size:11px' }, L(`Ai versiunea ${VERSION}.`, `You have version ${VERSION}.`)),
+      notes.length ? list : null,
+      el('div', { style: 'margin-bottom:8px' }, how),
+      el('div', { class: 'gcr-row' },
+        UPD.src === 'bm' ? el('button', { class: 'gcr-btn sm ok', onclick: () => { close(); location.reload(); } }, L('Reîncarcă GeoFS', 'Reload GeoFS'))
+          : el('a', { class: 'gcr-btn sm ok', href: 'https://github.com/razvan999x/geofs-copilot/raw/main/geofs-copilot.user.js', target: '_blank', rel: 'noopener', style: 'text-decoration:none', onclick: () => close() }, L('Actualizează acum', 'Update now')),
+        el('a', { class: 'gcr-link', href: ONLINE.site + '#/install', target: '_blank', rel: 'noopener' }, L('ajutor', 'help')),
+        el('button', { class: 'gcr-btn sm', onclick: close }, L('Mai târziu', 'Later'))));
+    ['mousedown', 'pointerdown', 'wheel', 'keydown'].forEach((t) => box.addEventListener(t, (e) => e.stopPropagation()));
+    document.body.append(box);
+  }
+
   /* ---------------- Interfață: Carieră, Școală, Jurnal ---------------- */
   function buildCareerPage(p) {
     const box = el('div'); p.append(box);
@@ -4491,6 +4534,8 @@ function gcrMain() {
   }
 }
 
+  // De unde a fost pornit pluginul (semn de carte = jsDelivr), pentru instrucțiunile de actualizare.
+  try { const cs = document.currentScript; if (cs && /jsdelivr/.test(cs.src || '')) document.documentElement.dataset.gcrSrc = 'bm'; } catch (e) { /* */ }
   // Injectăm codul ca <script> în pagină: funcționează și când Tampermonkey rulează scriptul izolat.
   try {
     const el = document.createElement('script');

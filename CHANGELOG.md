@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.8.3
+- Update notice: the plugin checks `version.json` on GitHub at start and every 3 hours. When a newer version is out, a card shows what's new and how to update (bookmark: reload; Tampermonkey: *Update now*). A ⬆️ badge also appears in the panel header.
+
 ## 1.8.2
 - Administrator login with a password (Settings → Administrator login), so the admin works on any computer or browser. The admin sets the password in the Admin tab. Wrong attempts are rate-limited on the server.
 - Admin logout on a single computer.
