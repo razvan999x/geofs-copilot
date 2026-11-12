@@ -20,6 +20,11 @@ Type a city name and the plugin flies the whole trip: automatic takeoff, climb, 
 - **Extended autopilot**: altitude, heading, speed, vertical speed and max bank, with keyboard shortcuts.
 - **Aircraft systems panel**: engines, gear, flaps, spoilers, brakes, trim, reverse thrust and **individual throttle per engine**.
 - **Missions and fuel.** Accept paid jobs at the airport you are at: passengers, cargo, fragile cargo, urgent medical or VIP flights, each with a deadline. Bonuses for smooth landings and on-time arrival, penalties for hard landings or delays. Fuel is simulated: capacity and burn come from the aircraft's mass and engine power, you refuel on the ground and pay for it from your earnings, and **if the tank runs dry the engines stop in flight**.
+- **Daily challenge and streaks.** Every day there is one tricky airport for everyone (Innsbruck, Gibraltar, Madeira, Lukla…). *Fly it now* puts you on final; your best score goes on the daily leaderboard. Fly on consecutive days to build a streak: up to +70 XP a day.
+- **Weekly landing contest.** Your best landing of the week is ranked automatically. The top 3 get the Podium badge.
+- **Special missions.** Bush flights to short strips, sightseeing tours over famous landmarks, skydiver drops, aerial survey photos at an exact altitude, and search & rescue with a signal that grows as you get closer.
+- **Airport passport.** Every airport and country you land at is stamped, with flags in the plugin and a map on your profile.
+- **Your own airline.** Found an airline at your hub, buy aircraft and give them routes you have flown yourself. They earn money even when you are offline, for up to 24 hours, so come back daily to collect. Good landings raise your reputation, and reputation raises income.
 - **Career.** Earn XP from flights, missions, lessons and achievements. Rise through 7 ranks, from Student Pilot to Chief Pilot. Higher ranks unlock bigger aircraft for missions and pay more. You can also buy a type rating early.
 - **Emergencies.** Random failures, if you turn them on: engine failure, jammed gear, bird strike, fuel leak, a medical emergency on board, autopilot failure. Each comes with a checklist, a divert-to-nearest-airport button and MAYDAY.
 - **Flight school.** Guided lessons: first takeoff, straight & level and turns, approach and landing, engine failure after takeoff, precision landing. Plus 15 achievements.
@@ -68,14 +73,38 @@ Open the **Missions** tab in the panel.
 - **Fuel.** The gauge shows fuel on board, current flow, endurance and the fuel needed for your planned route plus a 30-minute reserve (white mark). Refuel only on the ground, stopped, at an airport: *Fill up*, *Enough for the route* or *+25%*. Fuel costs $0.35/kg. If you run out in flight, the engines stop and will not restart. You can turn fuel simulation off or change the burn rate (×0.5 to ×3).
 - **Missions.** On the ground at an airport you get offers to destinations your aircraft can reach, with cargo or passengers, distance, deadline and pay. Accept one and the destination is set automatically. Wait for boarding, then fly (Full flight works). Land and stop at the destination to get paid.
 - **Pay.** +15% for an excellent landing, +10% for medical/VIP flights on time. −30% for a hard landing (−60% with fragile cargo), −10% if passengers were scared by steep banks, and a deadline penalty when late. Cancelling a mission costs 20% of its pay.
+- **Special missions** appear next to the regular ones:
+  - 🛩️ **Bush flight** (light aircraft): a short strip under 2,700 ft. A precise landing pays +20%.
+  - 📸 **Sightseeing tour**: overfly 1–3 landmarks near you (Eiffel Tower, Peleș Castle, Golden Gate…) below the given height, then land back. A smooth flight pays +10%.
+  - 🪂 **Skydivers** (light to regional aircraft): climb over the airport to the jump altitude, slow down, release them, then land.
+  - 🗺️ **Aerial survey**: three photo points in a line at an exact altitude. Perfect photos pay +25%, blurry ones cost 15% each.
+  - 🔎 **Search & rescue**: fly to the search zone and search low. The signal bars grow as you get closer. Once you find the survivor, land at any airport.
+  - The points appear on the 3D map and the moving map. The instruction box shows distance, bearing and the altitude target. *AP → point* makes the autopilot steer to the next point.
 - Your balance, missions, flight hours and distance are saved in your browser. Everyone starts with $10,000.
+
+## Daily challenge, streaks, landing contest and passport
+
+- **Daily challenge** (top of the Missions tab): one airport for everyone, changing at midnight UTC. Press *Fly it now* to start on final, or fly there any way you like. Every landing there counts, and your best score is kept. You can retry as often as you like. First completion of the day: +30 XP plus a bonus for the score.
+- **Streak:** your first flight of each day (UTC) gives +10 XP per day in a row, up to +70. Miss a day and it restarts.
+- **Weekly landing contest** (Career tab and the website): every pilot's best landing of the week, Monday to Sunday UTC. The runway must be identified.
+- **Passport** (Career tab): airports and countries you have landed at. Your profile on the website shows them on a map.
+
+## Airline
+
+Open the **Airline** tab. You need the Commercial Pilot rank and $25,000, and you must be on the ground at the airport that will be your hub.
+
+- **Buy aircraft** of any class you are licensed for. Each class has its own price and range.
+- **Routes** unlock when you fly from your hub to another airport (or back) yourself. Give each aircraft a route within its range.
+- **Income** builds up every hour and is kept for up to 24 hours. Press *Collect* to move it to your balance. Aircraft without a route cost maintenance.
+- **Reputation** goes up with good mission landings and down with failed or cancelled missions. It raises or lowers income. Missions to or from your hub pay +10%.
+- Your airline is saved with your cloud progress and listed on the website.
 
 ## Career, school, logbook and online leaderboard
 
 - **Career** tab: your rank and XP, type ratings (which aircraft classes you may fly on missions), achievements and the top 10 online.
 - **Training** tab: five guided lessons. Each one sets you up on the runway or on final, and the steps appear in the instruction box. You can also trigger a failure on purpose to practise.
 - **Logbook** tab: every flight, with distance, time, fuel, landing and pay. Export KML (Google Earth), GPX or CSV.
-- **Website:** https://razvan999x.github.io/geofs-copilot/ has the all-time leaderboard (by XP, earnings, hours, missions, butter landings or distance), the best landings of the last 30 days, recent flights and pilot profiles.
+- **Website:** https://razvan999x.github.io/geofs-copilot/ has the daily challenge, the weekly landing contest, airlines, the all-time leaderboard (by XP, earnings, hours, missions, butter landings, distance, countries or streak), the best landings of the last 30 days, recent flights and pilot profiles.
 - **Several computers:** in the Career tab, copy your *pilot code* and paste it on your other computer. The two profiles merge into one, with all flights, and your money, rank, type ratings, achievements and lessons stay in sync through the cloud. If you play on a new computer with the same GeoFS account, the plugin notices and offers to merge. The code is secret, like a password.
 - **Privacy:** only your GeoFS callsign and your flight statistics are published. Each browser gets a random secret key, so nobody else can post in your name. The server checks every flight for plausibility and computes XP itself. To stop publishing, untick *Publish my flights* in Settings.
 
@@ -155,6 +184,12 @@ Merge și cu Tampermonkey sau lipind codul în Console (F12).
 **Carieră, școală, jurnal și clasament:** câștigi XP și urci în grad (7 ranguri), primești urgențe aleatorii cu liste de verificare, faci lecții ghidate în tab-ul *Training*, iar zborurile se salvează în *Logbook* (export Google Earth). Clasamentul online e pe [site-ul GeoFS Copilot](https://razvan999x.github.io/geofs-copilot/).
 
 **Misiuni și combustibil:** în tab-ul **Missions** accepți misiuni plătite (pasageri, marfă, transport medical, VIP), alimentezi la sol și vezi cât combustibil îți trebuie pentru traseu. Dacă rămâi fără combustibil în zbor, motoarele se opresc.
+
+**Provocarea zilei, serii, concurs, pașaport:** în fiecare zi există un aeroport dificil, același pentru toți. Butonul *Zboară acum* te pune pe finală, iar cel mai bun scor intră în clasamentul zilei. Dacă zbori zile la rând, primești bonus XP (până la +70 pe zi). Cea mai bună aterizare a săptămânii intră automat în concursul de aterizare. Pașaportul adună aeroporturile și țările vizitate.
+
+**Misiuni speciale:** zboruri bush pe piste scurte, tururi turistice peste obiective celebre (Peleș, Bran, Turnul Eiffel…), parașutiști, fotografie aeriană la altitudine exactă și căutare-salvare.
+
+**Compania ta aeriană:** în tab-ul *Airline* (Companie) înființezi o companie la hub-ul tău, cumperi avioane și le dai rute pe care le-ai zburat tu. Câștigă bani și când nu joci, până la 24 de ore, așa că revii zilnic să încasezi.
 
 Limba se schimbă în **Settings → Language / Limba**.
 

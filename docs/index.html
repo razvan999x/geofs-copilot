@@ -72,6 +72,9 @@
     <nav id="nav">
       <a href="#/" data-r="">Home</a>
       <a href="#/leaderboard" data-r="leaderboard" data-i="nav_lb">Leaderboard</a>
+      <a href="#/daily" data-r="daily" data-i="nav_daily">Daily</a>
+      <a href="#/contest" data-r="contest" data-i="nav_contest">Contest</a>
+      <a href="#/airlines" data-r="airlines" data-i="nav_air">Airlines</a>
       <a href="#/flights" data-r="flights" data-i="nav_fl">Flights</a>
       <a href="#/install" data-r="install" data-i="nav_in">Install</a>
     </nav>
@@ -90,11 +93,26 @@ const KEY = 'sb_publishable_NGXvayFPZlpCXkPywDVF9w_D7rUw0Bb';
 const SCRIPT = 'https://cdn.jsdelivr.net/gh/razvan999x/geofs-copilot@main/geofs-copilot.user.js';
 const BOOKMARK = "javascript:(function(){var s=document.createElement('script');s.src='" + SCRIPT + "';document.body.appendChild(s);})();";
 const RANKS = [[0,'Student Pilot','Elev pilot'],[150,'Private Pilot','Pilot privat'],[500,'Commercial Pilot','Pilot comercial'],[1200,'First Officer','Copilot'],[2500,'Captain','Comandant'],[5000,'Senior Captain','Comandant senior'],[10000,'Chief Pilot','Pilot șef']];
-const ACH = {first_flight:['🛫','First flight','Primul zbor'],butter:['🧈','Butter','Butter'],butter5:['🧈','Velvet hands','Mâini de catifea'],smooth10:['🪶','Passengers love you','Pasagerii te iubesc'],precision:['🎯','Precision','Precizie'],explorer10:['🗺️','Explorer','Explorator'],explorer25:['🌍','Globetrotter','Globetrotter'],long_haul:['🌐','Long haul','Lung-curier'],missions10:['💼','Professional','Profesionist'],missions50:['🏢','Airline','Linie aeriană'],rich100k:['💰','Rich','Bogat'],hero:['🦸','Hero','Erou'],deadstick:['🪂','Glider pilot','Planorist'],school:['🎓','Graduate','Absolvent'],captain:['👨‍✈️','Captain','Comandant']};
-const MT = {pax:'🧑‍🤝‍🧑',cargo:'📦',fragile:'🍷',med:'🚑',vip:'🎩'};
+const ACH = {first_flight:['🛫','First flight','Primul zbor'],butter:['🧈','Butter','Butter'],butter5:['🧈','Velvet hands','Mâini de catifea'],smooth10:['🪶','Passengers love you','Pasagerii te iubesc'],precision:['🎯','Precision','Precizie'],explorer10:['🗺️','Explorer','Explorator'],explorer25:['🌍','Globetrotter','Globetrotter'],long_haul:['🌐','Long haul','Lung-curier'],missions10:['💼','Professional','Profesionist'],missions50:['🏢','Airline','Linie aeriană'],rich100k:['💰','Rich','Bogat'],hero:['🦸','Hero','Erou'],deadstick:['🪂','Glider pilot','Planorist'],school:['🎓','Graduate','Absolvent'],captain:['👨‍✈️','Captain','Comandant'],
+  airports50:['🛂','Full passport','Pașaport plin'],countries5:['🧳','Tourist','Turist'],countries15:['🗺️','Traveller','Călător'],countries30:['🌎','Citizen of the world','Cetățean al lumii'],
+  streak7:['🔥','One week straight','O săptămână la rând'],streak30:['☄️','Unstoppable','De neoprit'],daily:['🏆','Challenge accepted','Provocare acceptată'],daily_top3:['🥇','On the podium','Pe podium'],
+  contest_podium:['🏅','Landing contest podium','Podium la concursul de aterizare'],airline:['🏢','CEO','Director general'],fleet5:['🛫','Fleet','Flotă'],bush_pilot:['🛩️','Bush pilot','Pilot bush'],
+  tour_guide:['📸','Tour guide','Ghid turistic'],skydive:['🪂','Jump pilot','Lansare reușită'],surveyor:['🗺️','Surveyor','Cartograf'],sar_hero:['🛟','Rescuer','Salvator']};
+const MT = {pax:'🧑‍🤝‍🧑',cargo:'📦',fragile:'🍷',med:'🚑',vip:'🎩',bush:'🛩️',tour:'📸',skydive:'🪂',survey:'🗺️',sar:'🔎'};
+const flag = (c) => c && /^[A-Z]{2}$/.test(c) ? String.fromCodePoint(...[...c].map((x) => 127397 + x.charCodeAt(0))) : '🏳️';
+const cname = (c) => { try { return new Intl.DisplayNames([lang], {type:'region'}).of(c); } catch (e) { return c; } };
 let lang = localStorage.getItem('gcLang') || ((navigator.language||'').startsWith('ro') ? 'ro' : 'en');
 const T = {
-  nav_lb:['Leaderboard','Clasament'], nav_fl:['Flights','Zboruri'], nav_in:['Install','Instalare'],
+  nav_lb:['Leaderboard','Clasament'], nav_daily:['Daily','Provocarea zilei'], nav_contest:['Contest','Concurs'], nav_air:['Airlines','Companii'],
+  daily:['Daily challenge','Provocarea zilei'], dailyLead:['One airport for everyone, every day. Land there and post the best score – you can retry as many times as you like until midnight UTC.','Un aeroport pentru toți, în fiecare zi. Aterizează acolo și obține cel mai bun scor – poți reîncerca de câte ori vrei până la miezul nopții UTC.'],
+  dailyHow:['In the plugin: Missions tab → “Fly it now” puts you on an 8 NM final. Or fly there any way you like.','În plugin: tab-ul Misiuni → „Zboară acum” te pune pe o finală de 8 NM. Sau zbori până acolo cum vrei.'],
+  tomorrow:['Tomorrow','Mâine'], players:['pilots','piloți'], attempts:['tries','încercări'], noDaily:['Nobody has landed yet today – be the first!','Nimeni n-a aterizat încă azi – fii primul!'],
+  contest:['Weekly landing contest','Concursul săptămânal de aterizare'], contestLead:['Every pilot\'s best landing of the week (Monday–Sunday, UTC). Runway must be identified. Top 3 get the Podium badge.','Cea mai bună aterizare a fiecărui pilot din săptămână (luni–duminică, UTC). Pista trebuie identificată. Primii 3 primesc insigna Podium.'],
+  thisWeek:['This week','Săptămâna asta'], lastWeek:['Last week','Săptămâna trecută'], noContest:['No landings this week yet.','Nicio aterizare săptămâna asta.'],
+  airlines:['Virtual airlines','Companii aeriene virtuale'], airLead:['Airlines founded by pilots in the plugin (Airline tab). Their fleets earn money on routes the founder flew first.','Companii înființate de piloți în plugin (tab-ul Companie). Flotele lor câștigă bani pe rutele zburate întâi de fondator.'],
+  noAir:['No airlines yet – found the first one!','Încă nicio companie – înființează-o pe prima!'], fleet:['Fleet','Flotă'], routes:['Routes','Rute'], value:['Value','Valoare'], rep:['Reputation','Reputație'], hub:['Hub','Hub'], owner:['Owner','Proprietar'],
+  passport:['Passport','Pașaport'], countries:['countries','țări'], airportsW:['airports','aeroporturi'], streak:['Day streak','Serie de zile'], bestStreak:['best','record'], dailies:['Daily challenges','Provocări zilnice'],
+  explorers:['Countries','Țări'], streaks:['Streak','Serie'], nav_fl:['Flights','Zboruri'], nav_in:['Install','Instalare'],
   foot:['Made by Razvan Cristea · free and open source · not affiliated with GeoFS.','Creat de Razvan Cristea · gratuit și open source · neafiliat cu GeoFS.'],
   privacy:['The leaderboard stores only your GeoFS callsign and flight statistics. You can turn publishing off in the plugin settings.','Clasamentul păstrează doar indicativul din GeoFS și statisticile de zbor. Poți opri publicarea din setările pluginului.'],
   h1:['Your copilot for <em>GeoFS</em>','Copilotul tău pentru <em>GeoFS</em>'],
@@ -123,8 +141,9 @@ document.getElementById('lang').onclick = () => { lang = lang === 'ro' ? 'en' : 
 
 function pilotTable(rows, sort) {
   if (!rows.length) return `<div class="empty">${t('empty')}</div>`;
-  return `<div class="scroll"><table><thead><tr><th>#</th><th>${t('pilot')}</th><th class="num">XP</th><th class="num">${t('flights')}</th><th class="num hide-m">${t('hours')}</th><th class="num hide-m">${t('missions')}</th><th class="num">${t('earned')}</th><th class="num hide-m">${t('best')}</th></tr></thead><tbody>` +
-    rows.map((p) => `<tr class="p${p.pos}"><td class="pos">${p.pos}</td><td><a href="#/pilot/${p.id}"><b>${esc(p.callsign)}</b></a><span class="rank">${rankOf(p.xp)}</span></td><td class="num">${fmt(p.xp)}</td><td class="num">${fmt(p.flights)}</td><td class="num hide-m">${fmt(p.hours,1)}</td><td class="num hide-m">${fmt(p.missions)}</td><td class="num">$${fmt(p.earned)}</td><td class="num hide-m">${p.best_landing_fpm != null ? fmt(p.best_landing_fpm) + ' fpm' : '—'}</td></tr>`).join('') + '</tbody></table></div>';
+  const ex = {countries:[t('explorers'),(p)=>fmt(p.countries)+' · '+fmt(p.airports)+' ✈'],airports:[t('airportsW'),(p)=>fmt(p.airports)],streak:[t('streaks'),(p)=>'🔥 '+fmt(p.best_streak)+(p.streak?` <span class="muted">(${fmt(p.streak)})</span>`:'')]}[sort];
+  return `<div class="scroll"><table><thead><tr><th>#</th><th>${t('pilot')}</th>${ex?`<th class="num">${ex[0]}</th>`:''}<th class="num">XP</th><th class="num">${t('flights')}</th><th class="num hide-m">${t('hours')}</th><th class="num hide-m">${t('missions')}</th><th class="num">${t('earned')}</th><th class="num hide-m">${t('best')}</th></tr></thead><tbody>` +
+    rows.map((p) => `<tr class="p${p.pos}"><td class="pos">${p.pos}</td><td><a href="#/pilot/${p.id}"><b>${esc(p.callsign)}</b></a><span class="rank">${rankOf(p.xp)}</span>${p.streak>=2?` <span title="${t('streak')}">🔥${p.streak}</span>`:''}</td>${ex?`<td class="num"><b>${ex[1](p)}</b></td>`:''}<td class="num">${fmt(p.xp)}</td><td class="num">${fmt(p.flights)}</td><td class="num hide-m">${fmt(p.hours,1)}</td><td class="num hide-m">${fmt(p.missions)}</td><td class="num">$${fmt(p.earned)}</td><td class="num hide-m">${p.best_landing_fpm != null ? fmt(p.best_landing_fpm) + ' fpm' : '—'}</td></tr>`).join('') + '</tbody></table></div>';
 }
 function flightTable(rows, best) {
   if (!rows.length) return `<div class="empty">${t('emptyF')}</div>`;
@@ -136,12 +155,16 @@ async function home() {
   app.innerHTML = `<div class="hero"><div><h1>${t('h1')}</h1><p>${t('lead')}</p>
     <a class="btn pri" href="#/install">✈ ${t('install')}</a> <a class="btn" href="#/leaderboard">🏆 ${t('seeLb')}</a></div>
     <div class="stats" id="stats">${[0,1,2,3,4,5].map(() => '<div class="stat"><b>…</b><span>&nbsp;</span></div>').join('')}</div></div>
+    <section class="grid2"><div><h2>🏆 ${t('daily')} <a class="muted" style="font-size:14px" href="#/daily">→</a></h2><div class="card" id="hdaily"><div class="empty">${t('loading')}</div></div></div>
+      <div><h2>🧈 ${t('contest')} <a class="muted" style="font-size:14px" href="#/contest">→</a></h2><div class="card" id="hcontest"><div class="empty">${t('loading')}</div></div></div></section>
     <section><h2>🏆 ${t('topPilots')}</h2><div class="card" id="top"><div class="empty">${t('loading')}</div></div></section>
     <section class="grid2"><div><h2>🧈 ${t('bestLand')}</h2><div class="card" id="best"><div class="empty">${t('loading')}</div></div></div>
       <div><h2>🛫 ${t('recent')}</h2><div class="card" id="recent"><div class="empty">${t('loading')}</div></div></div></section>
     <section><h2>${t('features')}</h2><div class="feat">${features().map((f) => `<div><span style="font-size:24px">${f[0]}</span><b>${f[1]}</b><p>${f[2]}</p></div>`).join('')}</div></section>`;
-  try { const s = await rpc('get_stats'); document.getElementById('stats').innerHTML = [[s.pilots,t('pilots')],[s.flights,t('flights')],[s.hours,t('hours')],[s.nm,t('nm')],[s.missions,t('missions')],[s.flights_24h,t('f24')]].map(([v,l]) => `<div class="stat"><b>${fmt(v)}</b><span>${l}</span></div>`).join(''); } catch (e) { document.getElementById('stats').innerHTML = ''; }
+  try { const s = await rpc('get_stats'); document.getElementById('stats').innerHTML = [[s.pilots,t('pilots')],[s.flights,t('flights')],[s.hours,t('hours')],[s.nm,t('nm')],s.countries ? [s.countries,t('countries')] : [s.airports,t('airportsW')],[s.flights_24h,t('f24')]].map(([v,l]) => `<div class="stat"><b>${fmt(v)}</b><span>${l}</span></div>`).join(''); } catch (e) { document.getElementById('stats').innerHTML = ''; }
   rpc('get_leaderboard', {p_sort:'xp', p_limit:10}).then((r) => { document.getElementById('top').innerHTML = pilotTable(r); }).catch(() => {});
+  rpc('get_daily', {p_limit:5}).then((d) => { document.getElementById('hdaily').innerHTML = dailyHead(d) + scoreTable(d.board, 'daily'); }).catch(() => {});
+  rpc('get_landing_contest', {p_limit:5}).then((c) => { document.getElementById('hcontest').innerHTML = scoreTable(c.board, 'contest'); }).catch(() => {});
   rpc('get_recent_flights', {p_limit:8, p_best:true}).then((r) => { document.getElementById('best').innerHTML = flightTable(r, true); }).catch(() => {});
   rpc('get_recent_flights', {p_limit:8, p_best:false}).then((r) => { document.getElementById('recent').innerHTML = flightTable(r); }).catch(() => {});
 }
@@ -154,14 +177,17 @@ function features() {
     ['💼', ro ? 'Misiuni și carieră' : 'Missions & career', ro ? 'Pasageri, marfă, medical, VIP. Urci de la elev pilot la pilot șef.' : 'Passengers, cargo, medical, VIP. Rise from Student Pilot to Chief Pilot.'],
     ['⛽', ro ? 'Combustibil și urgențe' : 'Fuel & emergencies', ro ? 'Alimentezi, gestionezi consumul, reacționezi la defecțiuni.' : 'Refuel, manage your burn, handle failures in flight.'],
     ['📡', ro ? 'Control de trafic aerian' : 'Air traffic control', ro ? 'Fii controlor la orice aeroport sau zbori sub turnul virtual.' : 'Control any airport or fly under the virtual tower.'],
+    ['🏆', ro ? 'Provocarea zilei și serii' : 'Daily challenge & streaks', ro ? 'Un aeroport greu pe zi pentru toți, plus bonus XP pentru fiecare zi la rând.' : 'One tricky airport a day for everyone, plus bonus XP for every day in a row.'],
+    ['🛂', ro ? 'Pașaport și misiuni speciale' : 'Passport & special missions', ro ? 'Colecționează țări. Zboruri bush, tururi turistice, parașutiști, fotografie aeriană, căutare și salvare.' : 'Collect countries. Bush flights, sightseeing tours, skydivers, aerial survey, search & rescue.'],
+    ['🏢', ro ? 'Compania ta aeriană' : 'Your own airline', ro ? 'Cumpără avioane, deschide rute de la hub și încasează venituri zilnic.' : 'Buy aircraft, open routes from your hub and collect income every day.'],
   ];
 }
 async function leaderboard(sort) {
   sort = sort || 'xp';
-  const opts = [['xp','XP'],['earned',t('earned')],['hours',lang==='ro'?'Ore':'Hours'],['missions',lang==='ro'?'Misiuni':'Missions'],['butter',t('butter')],['nm',t('dist')]];
+  const opts = [['xp','XP'],['earned',t('earned')],['hours',lang==='ro'?'Ore':'Hours'],['missions',lang==='ro'?'Misiuni':'Missions'],['butter',t('butter')],['nm',t('dist')],['countries',t('explorers')],['streak',t('streaks')]];
   app.innerHTML = `<section><h2>🏆 ${t('nav_lb')}</h2><div class="tabs">${opts.map(([k,l]) => `<button data-s="${k}" class="${k===sort?'on':''}">${l}</button>`).join('')}</div><div class="card" id="lb"><div class="empty">${t('loading')}</div></div></section>`;
   app.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => { location.hash = '#/leaderboard/' + b.dataset.s; });
-  try { document.getElementById('lb').innerHTML = pilotTable(await rpc('get_leaderboard', {p_sort: sort, p_limit: 100})); } catch (e) { document.getElementById('lb').innerHTML = `<div class="empty">⚠ ${esc(e.message)}</div>`; }
+  try { document.getElementById('lb').innerHTML = pilotTable(await rpc('get_leaderboard', {p_sort: sort, p_limit: 100}), sort); } catch (e) { document.getElementById('lb').innerHTML = `<div class="empty">⚠ ${esc(e.message)}</div>`; }
 }
 async function flights() {
   app.innerHTML = `<section class="grid2"><div><h2>🧈 ${t('bestLand')}</h2><div class="card" id="best"><div class="empty">${t('loading')}</div></div></div>
@@ -178,9 +204,34 @@ async function pilot(id) {
     app.innerHTML = `<section><div class="profile-head"><div class="avatar">👨‍✈️</div><div><h2 style="margin:0">${esc(p.callsign)}</h2>
       <span class="rank" style="margin:0">${rankOf(p.xp)}</span> <span class="muted">· ${t('position')} #${d.rank_pos} · ${esc(p.last_aircraft || '')}</span></div></div>
       <div class="stats" style="margin-bottom:16px">${[[fmt(p.xp),'XP'],[fmt(p.flights),t('flights')],[fmt(p.hours,1),t('hours')],[fmt(p.missions),t('missions')],['$'+fmt(p.earned),t('earned')],[p.best_landing_fpm!=null?fmt(p.best_landing_fpm)+' fpm':'—',t('best')]].map(([v,l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('')}</div>
+      ${passportHtml(d)}
       <h2>🏅 ${t('achievements')}</h2><div class="ach" style="margin-bottom:18px">${ach.length ? ach.map((a) => `<span>${ACH[a.code][0]} ${ACH[a.code][lang==='ro'?2:1]}</span>`).join('') : '<span class="muted" style="background:none;border:0">—</span>'}</div>
       <h2>🛫 ${t('lastFlights')}</h2><div class="card">${flightTable((d.flights||[]).map((f) => Object.assign({}, f, {callsign: p.callsign, pilot_id: p.id})))}</div></section>`;
+    drawPassportMap(d.visits || []);
   } catch (e) { app.innerHTML = `<div class="empty">⚠ ${esc(e.message)}</div>`; }
+}
+function passportHtml(d) {
+  const p = d.pilot, v = d.visits || [], a = d.airline, dl = d.dailies || [];
+  const byC = {}; v.forEach((x) => { if (x.country) byC[x.country] = (byC[x.country] || 0) + 1; });
+  const cs = Object.keys(byC).sort((x, y) => byC[y] - byC[x]);
+  return `<div class="grid2" style="margin-bottom:16px"><div class="card" style="padding:14px 16px"><h3 style="margin:0 0 6px">🛂 ${t('passport')}</h3>
+      <div><b style="font-size:22px">${fmt(cs.length)}</b> ${t('countries')} · <b style="font-size:22px">${fmt(v.length)}</b> ${t('airportsW')}</div>
+      <div style="font-size:22px;line-height:1.5;margin-top:6px">${cs.map((c) => `<span title="${esc(cname(c))}: ${byC[c]}">${flag(c)}</span>`).join(' ') || '<span class="muted" style="font-size:14px">—</span>'}</div>
+      <div class="muted" style="font-size:12px;margin-top:6px">${v.map((x) => esc(x.icao)).join(' · ')}</div>
+      <div id="pmap" style="height:260px;border-radius:10px;margin-top:10px;${v.some((x) => x.lat != null) ? '' : 'display:none'}"></div></div>
+    <div class="card" style="padding:14px 16px"><h3 style="margin:0 0 6px">🔥 ${t('streak')}: ${fmt(p.streak || 0)} <span class="muted" style="font-size:14px">· ${t('bestStreak')} ${fmt(p.best_streak || 0)}</span></h3>
+      ${a ? `<h3 style="margin:12px 0 4px">🏢 ${esc(a.name)} <span class="muted">${esc(a.code)}</span></h3><div class="muted">${t('hub')} ${esc(a.hub)} · ${fmt(a.fleet)} ✈ · ${fmt(a.routes)} ${t('routes').toLowerCase()} · ${t('rep')} ${fmt(a.rep)} · $${fmt(a.value)}</div>` : ''}
+      ${dl.length ? `<h3 style="margin:12px 0 4px">🏆 ${t('dailies')}</h3><div class="muted">${dl.map((x) => `${esc(x.day.slice(5))} ${esc(x.icao)} <b style="color:var(--fg)">${x.score}</b>`).join(' · ')}</div>` : ''}</div></div>`;
+}
+async function drawPassportMap(v) {
+  const pts = v.filter((x) => x.lat != null && x.lon != null); if (!pts.length) return;
+  try {
+    await loadLeaflet(); const el = document.getElementById('pmap'); if (!el) return;
+    const m = L.map(el, {worldCopyJump: true, scrollWheelZoom: false});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 12, attribution: '© OpenStreetMap'}).addTo(m);
+    const g = L.featureGroup(pts.map((x) => L.circleMarker([+x.lat, +x.lon], {radius: 5 + Math.min(6, x.n), color: '#e040fb', fillOpacity: .7}).bindTooltip(`${x.icao} ${flag(x.country)} · ${x.n}×`))).addTo(m);
+    m.fitBounds(g.getBounds().pad(0.3), {maxZoom: 7});
+  } catch (e) { /* hartă indisponibilă */ }
 }
 function install() {
   const ro = lang === 'ro';
@@ -201,12 +252,49 @@ function install() {
   const bm = document.getElementById('bm'); bm.setAttribute('href', BOOKMARK); bm.onclick = (e) => { e.preventDefault(); alert(ro ? 'Trage butonul pe bara de semne de carte, nu da click pe el aici.' : 'Drag the button to your bookmarks bar – don\'t click it here.'); };
   document.getElementById('bmcode').textContent = BOOKMARK;
 }
+function scoreTable(rows, kind) {
+  if (!rows || !rows.length) return `<div class="empty">${t(kind === 'daily' ? 'noDaily' : 'noContest')}</div>`;
+  return `<div class="scroll"><table><thead><tr><th>#</th><th>${t('pilot')}</th><th class="num">${t('score')}</th><th class="num">${t('landing')}</th><th class="num hide-m">G</th><th class="hide-m">${kind === 'daily' ? t('aircraft') : t('route')}</th>${kind === 'daily' ? `<th class="num hide-m">${t('attempts')}</th>` : `<th class="num hide-m">${t('when')}</th>`}</tr></thead><tbody>` +
+    rows.map((x) => `<tr class="p${x.pos}"><td class="pos">${['🥇','🥈','🥉'][x.pos-1] || x.pos}</td><td><a href="#/pilot/${x.pilot_id}"><b>${esc(x.callsign)}</b></a></td><td class="num"><b>${x.score}</b></td><td class="num">${fmt(x.vs)} fpm</td><td class="num hide-m">${x.g != null ? fmt(x.g, 2) : '—'}</td><td class="hide-m muted">${esc(kind === 'daily' ? (x.aircraft || '') : (x.arr || ''))}</td>${kind === 'daily' ? `<td class="num hide-m">${fmt(x.attempts)}</td>` : `<td class="num hide-m muted">${ago(x.created_at)}</td>`}</tr>`).join('') + '</tbody></table></div>';
+}
+function dailyHead(d) {
+  const left = Math.max(0, Math.round((Date.parse(d.day + 'T00:00:00Z') + 86400000 - Date.now()) / 3600000));
+  return `<div style="padding:14px 16px;border-bottom:1px solid var(--line)"><b style="font-size:20px">${esc(d.icao)}</b> · ${lang==='ro'?'pista':'runway'} <b>${esc(d.rwy)}</b>${d.light_only ? ` · <span class="muted">${lang==='ro'?'pistă scurtă – avion ușor':'short strip – light aircraft'}</span>` : ''}<br><span class="muted">${fmt(d.players)} ${t('players')} · ${lang==='ro'?'se termină în':'ends in'} ~${left} h · ${t('tomorrow')}: ${esc(d.tomorrow && d.tomorrow.icao || '?')}</span></div>`;
+}
+async function daily() {
+  app.innerHTML = `<section><h2>🏆 ${t('daily')}</h2><p class="muted">${t('dailyLead')}</p><div class="card" id="dl"><div class="empty">${t('loading')}</div></div><p class="muted" style="font-size:13px">${t('dailyHow')}</p></section>`;
+  try { const d = await rpc('get_daily', {p_limit: 100}); document.getElementById('dl').innerHTML = dailyHead(d) + scoreTable(d.board, 'daily'); } catch (e) { document.getElementById('dl').innerHTML = `<div class="empty">⚠ ${esc(e.message)}</div>`; }
+}
+async function contest(w) {
+  w = w === '1' ? 1 : 0;
+  app.innerHTML = `<section><h2>🧈 ${t('contest')}</h2><p class="muted">${t('contestLead')}</p><div class="tabs"><button data-w="0" class="${w===0?'on':''}">${t('thisWeek')}</button><button data-w="1" class="${w===1?'on':''}">${t('lastWeek')}</button></div><div class="card" id="ct"><div class="empty">${t('loading')}</div></div></section>`;
+  app.querySelectorAll('.tabs button').forEach((b) => b.onclick = () => { location.hash = '#/contest/' + b.dataset.w; });
+  try { const c = await rpc('get_landing_contest', {p_week_offset: w, p_limit: 100}); document.getElementById('ct').innerHTML = `<div class="muted" style="padding:10px 16px;border-bottom:1px solid var(--line)">${esc(c.week_start)} – ${esc(c.week_end)} · ${fmt(c.players)} ${t('players')}</div>` + scoreTable(c.board, 'contest'); } catch (e) { document.getElementById('ct').innerHTML = `<div class="empty">⚠ ${esc(e.message)}</div>`; }
+}
+async function airlines() {
+  app.innerHTML = `<section><h2>🏢 ${t('airlines')}</h2><p class="muted">${t('airLead')}</p><div class="card" id="al"><div class="empty">${t('loading')}</div></div></section>`;
+  try {
+    const l = await rpc('get_airlines', {p_limit: 100});
+    document.getElementById('al').innerHTML = !l.length ? `<div class="empty">${t('noAir')}</div>` : `<div class="scroll"><table><thead><tr><th>#</th><th>${lang==='ro'?'Companie':'Airline'}</th><th>${t('hub')}</th><th class="num">${t('fleet')}</th><th class="num hide-m">${t('routes')}</th><th class="num hide-m">${t('rep')}</th><th class="num">${t('value')}</th><th>${t('owner')}</th></tr></thead><tbody>` +
+      l.map((a, i) => `<tr class="p${i+1}"><td class="pos">${i+1}</td><td><b>${esc(a.name)}</b> <span class="muted">${esc(a.code)}</span></td><td>${esc(a.hub)}</td><td class="num">${fmt(a.fleet)} ✈</td><td class="num hide-m">${fmt(a.routes)}</td><td class="num hide-m">${fmt(a.rep)}</td><td class="num">$${fmt(a.value)}</td><td><a href="#/pilot/${a.pilot_id}">${esc(a.callsign)}</a></td></tr>`).join('') + '</tbody></table></div>';
+  } catch (e) { document.getElementById('al').innerHTML = `<div class="empty">⚠ ${esc(e.message)}</div>`; }
+}
+function loadLeaflet() {
+  if (window.L) return Promise.resolve();
+  return new Promise((res, rej) => {
+    const c = document.createElement('link'); c.rel = 'stylesheet'; c.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(c);
+    const s = document.createElement('script'); s.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s);
+  });
+}
 function route() {
   const parts = location.hash.replace(/^#\/?/, '').split('/');
   document.querySelectorAll('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.r === (parts[0] === 'pilot' ? 'leaderboard' : parts[0])));
   window.scrollTo(0, 0);
   if (parts[0] === 'leaderboard') return leaderboard(parts[1]);
   if (parts[0] === 'flights') return flights();
+  if (parts[0] === 'daily') return daily();
+  if (parts[0] === 'contest') return contest(parts[1]);
+  if (parts[0] === 'airlines') return airlines();
   if (parts[0] === 'install') return install();
   if (parts[0] === 'pilot' && parts[1]) return pilot(parts[1]);
   return home();

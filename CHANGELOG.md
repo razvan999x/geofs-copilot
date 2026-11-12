@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.8.0
+- **Daily challenge:** one tricky airport a day for everyone, with a *Fly it now* button that puts you on final and a daily leaderboard.
+- **Day streaks:** bonus XP for the first flight of each day, up to +70 XP.
+- **Weekly landing contest:** every pilot's best landing of the week is ranked; the top 3 earn the Podium badge.
+- **Special missions:** bush flights to short strips, sightseeing tours over landmarks, skydiver drops, aerial survey and search & rescue, with points on the 3D map and the moving map and an *AP → point* mode.
+- **Airport passport:** airports and countries you have visited, with flags in the plugin and a map on the website.
+- **Airline:** found your own airline at a hub, buy aircraft, assign routes you have flown and collect income daily (kept for up to 24 h). Reputation follows your mission landings.
+- 15 new achievements (30 in total).
+- Landings on short strips (under 2,000 ft) are now recognised. The logbook records the aircraft's real name.
+- Website: Daily, Contest and Airlines pages, a passport map and streak on pilot profiles, and Countries and Streak leaderboards.
+
 ## 1.7.2
 - The ATC tower no longer posts "Tower online" in the public chat every minute. Its presence travels through the hidden Copilot signal instead. There is one optional chat announcement when the tower opens ("Announce tower in chat: once / never").
 
