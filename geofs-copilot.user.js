@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.9.0
+// @version      1.9.1
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -123,7 +123,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.9.0';
+  const VERSION = '1.9.1';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -4222,7 +4222,7 @@ function gcrMain() {
     if (!settings.onlineSync || NOTICES.busy) return;
     NOTICES.busy = true;
     try {
-      const list = await rpc('get_notices', { p_key: CAREER.key, p_since: NOTICES.last || 0 });
+      const list = await rpc('get_notices', { p_key: CAREER.key, p_since: NOTICES.last || 0, p_version: VERSION });
       if (Array.isArray(list) && list.length) {
         const fresh = NOTICES.last == null ? list.slice(-3) : list; // prima pornire: doar ultimele 3
         NOTICES.last = list[list.length - 1].id; store.set('geofsCopilotRO.noticeLast', NOTICES.last);
@@ -4307,6 +4307,10 @@ function gcrMain() {
     const target = el('select', { style: 'flex:1;min-width:0' });
     target.addEventListener('change', () => { A.to = target.value; });
     const sentBox = el('div', { class: 'gcr-list', style: 'max-height:none' });
+    const playersBox = el('div', { class: 'gcr-list', style: 'max-height:260px' }), playersSum = el('div', { class: 'gcr-muted' });
+    const ago = (t) => { if (!t) return '—'; const m = Math.round((Date.now() - Date.parse(t)) / 60000); return m < 2 ? L('acum', 'now') : m < 60 ? m + ' min' : m < 1440 ? Math.round(m / 60) + ' h' : Math.round(m / 1440) + L(' z', ' d'); };
+    const verBadge = (v) => !v ? el('span', { class: 'gcr-muted', title: L('versiune veche (sub 1.9.1) sau n-a mai pornit pluginul', 'old version (before 1.9.1) or has not started the plugin since') }, '⚪ ≤1.9.0')
+      : el('span', { style: `color:${verNum(v) >= verNum(VERSION) ? '#4cff8f' : '#ffb74d'}` }, (verNum(v) >= verNum(VERSION) ? '🟢 ' : '🟠 ') + 'v' + v);
     const send = async () => {
       const text = msg.value.trim(); if (!text) { ui.toast(L('Scrie un mesaj.', 'Write a message.')); return; }
       const who = A.to ? (A.pilots.find((x) => x.id === A.to) || {}).callsign : L('toți jucătorii', 'all players');
@@ -4331,6 +4335,13 @@ function gcrMain() {
       target.innerHTML = '';
       target.append(el('option', { value: '' }, '📣 ' + L('Toți jucătorii', 'All players')), ...A.pilots.filter((x) => !x.hidden).map((x) => el('option', { value: x.id }, `👤 ${x.callsign} · ${x.xp} XP · ${x.flights} ${L('zboruri', 'flights')}`)));
       target.value = A.pilots.some((x) => x.id === cur) ? cur : ''; A.to = target.value;
+      playersBox.innerHTML = '';
+      const vis = A.pilots.filter((x) => !x.hidden);
+      const latest = vis.filter((x) => x.client_version && verNum(x.client_version) >= verNum(VERSION)).length, old = vis.filter((x) => x.client_version && verNum(x.client_version) < verNum(VERSION)).length;
+      playersSum.textContent = L(`${vis.length} jucători · 🟢 ${latest} pe ultima versiune · 🟠 ${old} pe versiuni vechi · ⚪ ${vis.length - latest - old} necunoscut`, `${vis.length} players · 🟢 ${latest} on the latest version · 🟠 ${old} on older versions · ⚪ ${vis.length - latest - old} unknown`);
+      vis.forEach((x) => playersBox.append(el('div', { class: 'gcr-item' + (A.to === x.id ? ' sel' : ''), style: 'cursor:pointer', title: L('Clic: trimite-i un mesaj', 'Click: send them a message'), onclick: () => { A.to = x.id; target.value = x.id; render(); msg.focus(); } },
+        el('span', { style: 'flex:1;min-width:0' }, el('b', {}, x.callsign), el('span', { class: 'gcr-muted' }, ` · ${x.xp} XP · ${x.flights} ${L('zboruri', 'flights')}`)),
+        el('span', { style: 'text-align:right;font-size:11px' }, verBadge(x.client_version), el('br'), el('span', { class: 'gcr-muted' }, L('văzut ', 'seen ') + ago(x.last_seen || x.last_flight_at))))));
       sentBox.innerHTML = '';
       if (!A.sent.length) sentBox.append(el('div', { class: 'gcr-item gcr-muted' }, L('Niciun mesaj trimis.', 'No messages sent yet.')));
       A.sent.forEach((n) => {
@@ -4346,7 +4357,9 @@ function gcrMain() {
         el('label', {}, cheats, ' ', L('Bani nelimitați, rang maxim și toate avioanele deblocate', 'Unlimited money, top rank and every aircraft unlocked'))),
       el('b', { style: 'display:block;margin-top:10px' }, '📢 ' + L('Trimite o notificare', 'Send a notification')),
       el('div', { class: 'gcr-muted' }, L('Apare ca o fereastră în GeoFS la jucătorii cu pluginul (în cel mult un minut, sau la următoarea pornire, timp de 7 zile).', 'It pops up in GeoFS for players with the plugin (within a minute, or next time they start it, for 7 days).')),
+      el('b', { style: 'display:block;margin-top:10px' }, '👥 ' + L('Jucători și versiuni', 'Players and versions')), playersSum,
       el('div', { class: 'gcr-row' }, search, el('button', { class: 'gcr-btn sm', onclick: () => { A.q = search.value.trim(); loadPilots(); } }, L('Caută', 'Search'))),
+      playersBox,
       el('div', { class: 'gcr-row' }, el('span', {}, L('Către:', 'To:')), target),
       msg,
       el('div', { class: 'gcr-row' }, el('button', { class: 'gcr-btn sm ok', onclick: send }, '📢 ' + L('Trimite', 'Send'))),

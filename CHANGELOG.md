@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.9.1
+- Admin tab: player list with each player's plugin version (🟢 latest, 🟠 older, ⚪ unknown) and when they were last seen. Click a player to message them.
+
 ## 1.9.0
 - **Events:** the administrator creates group flights and challenges (title, description, start time, duration, departure → arrival, suggested aircraft, XP and/or money bonus) and can announce them to everyone.
 - Players see upcoming events in the Missions tab, can join, get a reminder 15 minutes before and when it starts, and can jump to the departure runway with the route ready.
