@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.8.1
+// @version      1.8.2
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -123,7 +123,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.8.1';
+  const VERSION = '1.8.2';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -1798,7 +1798,7 @@ function gcrMain() {
         ['Shift+S', L('spoilere', 'spoilers')], ['Shift+E', L('motoare pornit/oprit', 'engines on/off')], ['Shift+C', L('cameră următoare', 'next camera')], ['Shift+X', L('ultima aterizare', 'last landing')], ['Shift+Y / U', L('ATC: accept / refuz', 'ATC: accept / unable')],
       ].map(([k, d]) => `<div><span class="gcr-kbd">${k}</span> ${d}</div>`).join('') }),
       el('b', { style: 'display:block;margin-top:8px' }, L('Ultimele aterizări', 'Recent landings')), hist,
-      about,
+      about, adminLoginBox(),
     );
     ui.renderHist = () => {
       const h = store.get(LS_LANDINGS, []);
@@ -4243,8 +4243,45 @@ function gcrMain() {
       if (ADMIN.on && !was) ui.toast(L('🛡️ Mod administrator activ.', '🛡️ Administrator mode active.'), 6000);
     } catch (e) { /* */ }
     ui.showAdminTab && ui.showAdminTab(ADMIN.on);
+    ui.renderAdminLogin && ui.renderAdminLogin();
   }
   const adminCheats = () => ADMIN.on && settings.adminCheats !== false;
+  async function adminLogin(pass) {
+    if (!pass) { ui.toast(L('Scrie parola.', 'Enter the password.')); return false; }
+    try {
+      await rpc('admin_login', { p_key: CAREER.key, p_password: pass, p_callsign: myCallsign() });
+      await adminCheck();
+      ui.toast(L('🛡️ Autentificat ca administrator pe acest calculator.', '🛡️ Logged in as administrator on this computer.'), 7000);
+      ui.renderAdminLogin && ui.renderAdminLogin();
+      return true;
+    } catch (e) {
+      ui.toast(L('Autentificare eșuată: ', 'Login failed: ') + (e.message === 'wrong password' ? L('parolă greșită.', 'wrong password.') : e.message), 7000);
+      return false;
+    }
+  }
+  async function adminLogout() {
+    try { await rpc('admin_logout', { p_key: CAREER.key }); } catch (e) { /* */ }
+    ADMIN.on = false; store.set('geofsCopilotRO.admin', false);
+    ui.showAdminTab && ui.showAdminTab(false); ui.renderAdminLogin && ui.renderAdminLogin();
+    OFFERS.t = 0; ui.renderCareer && ui.renderCareer();
+    ui.toast(L('Ai ieșit din contul de administrator pe acest calculator.', 'Logged out of the administrator account on this computer.'));
+  }
+  /** Caseta discretă din Setări: autentificare de administrator cu parolă, pe orice calculator. */
+  function adminLoginBox() {
+    const wrap = el('div', { style: 'margin-top:10px' });
+    ui.renderAdminLogin = () => {
+      wrap.innerHTML = '';
+      if (ADMIN.on) { wrap.append(el('div', { class: 'gcr-muted' }, '🛡️ ' + L('Administrator pe acest calculator · ', 'Administrator on this computer · '), el('a', { href: '#', class: 'gcr-link', onclick: (e) => { e.preventDefault(); adminLogout(); } }, L('ieși', 'log out')))); return; }
+      const link = el('a', { href: '#', class: 'gcr-link', style: 'font-size:11px;opacity:.6' }, '🛡️ ' + L('Autentificare administrator', 'Administrator login'));
+      const pass = el('input', { type: 'password', placeholder: L('Parola de administrator', 'Administrator password'), autocomplete: 'current-password', style: 'flex:1;min-width:0' });
+      const row = el('div', { class: 'gcr-row', style: 'display:none' }, pass, el('button', { class: 'gcr-btn sm ok', onclick: () => adminLogin(pass.value).then((ok) => { if (ok) pass.value = ''; }) }, L('Intră', 'Log in')));
+      pass.addEventListener('keydown', (e) => { if (e.key === 'Enter') adminLogin(pass.value).then((ok) => { if (ok) pass.value = ''; }); });
+      link.onclick = (e) => { e.preventDefault(); row.style.display = row.style.display === 'none' ? '' : 'none'; if (row.style.display === '') pass.focus(); };
+      wrap.append(link, row);
+    };
+    ui.renderAdminLogin();
+    return wrap;
+  }
   function adminTick() {
     if (!adminCheats()) return;
     if (ECON.balance < 5e6) { ECON.balance = 1e7; saveEcon(); }
@@ -4267,6 +4304,14 @@ function gcrMain() {
         await rpc('admin_send_notice', { p_key: CAREER.key, p_to: A.to || null, p_msg: text });
         msg.value = ''; ui.toast(L(`📢 Trimis către ${who}.`, `📢 Sent to ${who}.`)); loadSent();
       } catch (e) { ui.toast(L('Nu s-a trimis: ', 'Not sent: ') + e.message, 8000); }
+    };
+    const pw1 = el('input', { type: 'password', placeholder: L('Parolă nouă', 'New password'), autocomplete: 'new-password', style: 'flex:1;min-width:0' });
+    const pw2 = el('input', { type: 'password', placeholder: L('Repetă parola', 'Repeat password'), autocomplete: 'new-password', style: 'flex:1;min-width:0' });
+    const setPw = async () => {
+      if (pw1.value.length < 10) { ui.toast(L('Parola trebuie să aibă minim 10 caractere.', 'The password must be at least 10 characters.')); return; }
+      if (pw1.value !== pw2.value) { ui.toast(L('Parolele nu coincid.', 'The passwords do not match.')); return; }
+      try { await rpc('admin_set_password', { p_key: CAREER.key, p_new: pw1.value }); pw1.value = ''; pw2.value = ''; ui.toast(L('🔑 Parola de administrator a fost salvată.', '🔑 Administrator password saved.'), 6000); }
+      catch (e) { ui.toast(L('Nu s-a salvat: ', 'Not saved: ') + e.message, 7000); }
     };
     const cheats = el('input', { type: 'checkbox' });
     cheats.addEventListener('change', () => { settings.adminCheats = cheats.checked; saveSettings(); OFFERS.t = 0; adminTick(); ui.renderCareer && ui.renderCareer(); ui.renderMissions && ui.renderMissions(); });
@@ -4295,7 +4340,11 @@ function gcrMain() {
       el('div', { class: 'gcr-row' }, el('span', {}, L('Către:', 'To:')), target),
       msg,
       el('div', { class: 'gcr-row' }, el('button', { class: 'gcr-btn sm ok', onclick: send }, '📢 ' + L('Trimite', 'Send'))),
-      el('b', { style: 'display:block;margin-top:10px' }, L('Mesaje trimise', 'Sent messages')), sentBox);
+      el('b', { style: 'display:block;margin-top:10px' }, L('Mesaje trimise', 'Sent messages')), sentBox,
+      el('b', { style: 'display:block;margin-top:12px' }, '🔑 ' + L('Parola de administrator', 'Administrator password')),
+      el('div', { class: 'gcr-muted' }, L('Cu parola te poți autentifica ca admin pe orice calculator sau browser: Setări → „Autentificare administrator” (jos). Minim 10 caractere.', 'With the password you can log in as admin on any computer or browser: Settings → “Administrator login” (at the bottom). At least 10 characters.')),
+      el('div', { class: 'gcr-row' }, pw1, pw2, el('button', { class: 'gcr-btn sm ok', onclick: setPw }, L('Salvează', 'Save'))),
+      el('div', { class: 'gcr-row' }, el('button', { class: 'gcr-btn sm warn', onclick: adminLogout }, L('Ieși din admin pe acest calculator', 'Log out of admin on this computer'))));
     ui.renderAdmin = () => { loadPilots(); loadSent(); };
     render();
   }

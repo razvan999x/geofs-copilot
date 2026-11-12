@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.8.2
+- Administrator login with a password (Settings → Administrator login), so the admin works on any computer or browser. The admin sets the password in the Admin tab. Wrong attempts are rate-limited on the server.
+- Admin logout on a single computer.
+
 ## 1.8.1
 - Notifications: the administrator can send a message to all players or to one pilot. It pops up in GeoFS within a minute (kept for 7 days).
 - Administrator mode for the project owner (confirmed by the server): hidden from leaderboards and stats, optional unlimited money and top rank.
