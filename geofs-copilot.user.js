@@ -2,7 +2,7 @@
 // @name         GeoFS Copilot – auto takeoff, navigation, ILS approach & autoland
 // @name:ro      GeoFS Copilot – decolare automată, navigație, apropiere ILS și aterizare
 // @namespace    geofs-copilot-ro
-// @version      1.9.2
+// @version      1.9.3
 // @description  Pick a destination by city name and fly from takeoff to landing: automatic takeoff, stopovers, moving map, step-by-step instructions, 3D approach corridor, ILS-style alignment, autoland, HUD, landing score, extended autopilot and aircraft systems panel.
 // @description:ro Alegi destinația după oraș și zbori de la decolare la aterizare: decolare automată, escale, hartă, instrucțiuni pas cu pas, culoar de apropiere 3D, aliniere ca ILS, aterizare automată, HUD, scor de aterizare, autopilot extins și panou cu sistemele avionului.
 // @author       Razvan Cristea
@@ -123,7 +123,7 @@ function gcrMain() {
   const saveSettings = () => store.set(LS_KEY, settings);
   /** Text în limba aleasă: L('română', 'English'). Implicit engleză. */
   const L = (ro, en) => (settings.lang === 'ro' ? ro : en);
-  const VERSION = '1.9.2';
+  const VERSION = '1.9.3';
   const AUTHOR = 'Razvan Cristea';
   const REPO_URL = 'https://github.com/razvan999x/geofs-copilot';
 
@@ -4367,7 +4367,8 @@ function gcrMain() {
     box.append(
       el('div', { class: 'gcr-destcard', style: 'margin-top:0;border-color:#e040fb' },
         el('div', { style: 'font-size:15px;font-weight:800' }, '🛡️ ' + L('Administrator', 'Administrator')),
-        el('div', { class: 'gcr-muted', style: 'margin:3px 0' }, L('Profilul tău e ascuns: nu apare în clasamente, statistici, provocarea zilei, concurs sau lista de companii.', 'Your profile is hidden: it does not appear in leaderboards, stats, the daily challenge, the contest or the airline list.')),
+        el('div', { class: 'gcr-muted', style: 'margin:3px 0' }, ADMIN.hidden ? L('Profilul tău e ascuns: nu apare în clasamente, statistici, provocarea zilei, concurs sau lista de companii.', 'Your profile is hidden: it does not appear in leaderboards, stats, the daily challenge, the contest or the airline list.')
+          : L('Profilul tău apare normal în clasamente, statistici și la jucătorii online, ca al oricărui pilot.', 'Your profile shows up normally in leaderboards, stats and the online count, like any other pilot.')),
         el('label', {}, cheats, ' ', L('Bani nelimitați, rang maxim și toate avioanele deblocate', 'Unlimited money, top rank and every aircraft unlocked'))),
       el('b', { style: 'display:block;margin-top:10px' }, '📢 ' + L('Trimite o notificare', 'Send a notification')),
       el('div', { class: 'gcr-muted' }, L('Apare ca o fereastră în GeoFS la jucătorii cu pluginul (în cel mult un minut, sau la următoarea pornire, timp de 7 zile).', 'It pops up in GeoFS for players with the plugin (within a minute, or next time they start it, for 7 days).')),

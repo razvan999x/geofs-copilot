@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.9.3
+- Admin tab: the profile note now shows whether the admin profile is hidden or visible.
+
 ## 1.9.2
 - Copilot recognition signal: a few multiplayer errors no longer switch it off for the whole session. It pauses, retries after 2 minutes, and only stays off if the GeoFS server keeps rejecting it. The red message now has a *retry* link.
 
